@@ -13,3 +13,39 @@ npm-debug.log*
 
 # OS
 .DS_Store
+
+# Agent/workspace files — local only, not part of the app
+AGENTS.md
+BOOTSTRAP.md
+HEARTBEAT.md
+IDENTITY.md
+MEMORY.md
+SOUL.md
+TOOLS.md
+USER.md
+*.png
+.crater-api-token
+.crater-api-token-capco
+.secrets
+.tokens/
+.openclaw/
+.pi/
+memory/
+capco/
+crater/
+reave/
+capco-email-processor/
+capco-ops/
+checklists/
+clients/
+invoices/
+scripts/
+client-sync-plan.md
+crater-line-items.md
+domain-transitions.md
+harvest-integration.md
+kinsta-migration-plan.md
+monitoring-setup.md
+railway-project-setup.md
+uptimerobot-audit.md
+urgent-issues.md
