@@ -1,17 +1,15 @@
-# Secrets - DO NOT COMMIT
-.secrets
-.tokens
-.crater-api-token
-.crater-api-token-*
-*.env
-.env.*
-config-*.json
+# Node
+node_modules
+npm-debug.log*
 
-# OS files
+# Local env
+.env
+
+# Build artifacts
+/dist
+
+# Backup exports
+*.tar.gz
+
+# OS
 .DS_Store
-Thumbs.db
-
-# Local project dirs
-capco/
-crater/
-reave/

@@ -1,4 +1,26 @@
-# MEMORY.md — Tibby's Long-Term Memory
+## Current Session Context (2026-04-05)
+
+### GitHub Cleanup Needed
+- Run: `git filter-repo --path .secrets --path .tokens --path .crater-api-token --path .crater-api-token-capco --invert-paths --force`
+- Then: `git push -f origin main`
+- This removes exposed secrets from GitHub history
+
+### Harvest→Crater Import (Paused)
+- Connected to Harvest API (token: 9626.pt.3nIKMokUmKfhiNJqeEXiOtvpsy787RvfLGpHZPVYbI4W3ptgbhB5JFeMVc_imjgwn3Obg3ZCe9srFUfYG0a0KQ, Account ID: 155800)
+- Backed up to /data/workspace/harvest-backup/:
+  - clients.json (200 clients)
+  - projects.json (359 projects)
+  - invoices.json (1,123 invoices)
+  - time_entries.json
+- Need to: Create Crater backup before import, then import clients/invoices
+
+### Local Sync Issue
+- Local OpenClaw workspace: ~/.openclaw/workspace tracks eliteweblabs/clawdbot-railway-template
+- Agent files gitignored - won't be committed
+- Need private repo for agent files sync
+
+## Previous Sessions
+- 2026-04-05: Crater migration attempted (failed - MariaDB had no public proxy), switched back to original installation
 
 ## Thomas
 - **Web developer** at Elite Web Labs — manages multiple client sites
