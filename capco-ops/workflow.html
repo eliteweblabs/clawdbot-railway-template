@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CAPCO Email Pipeline — Workflow</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; min-height: 100vh; overflow-x: auto; }
+  .header { padding: 20px 32px; background: #16213e; border-bottom: 1px solid #0f3460; display: flex; justify-content: space-between; align-items: center; }
+  .header h1 { font-size: 20px; color: #fff; }
+  .header .subtitle { font-size: 13px; color: #888; margin-top: 2px; }
+  .badge { background: #0f3460; color: #53a8f1; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  .canvas { padding: 40px; min-height: calc(100vh - 70px); position: relative; }
+  
+  /* Flow rows */
+  .flow-row { display: flex; align-items: center; margin-bottom: 16px; gap: 0; }
+  .flow-row.indented { margin-left: 120px; }
+  .flow-row.indented-2 { margin-left: 240px; }
+  
+  /* Nodes */
+  .node { 
+    background: #16213e; border: 2px solid #0f3460; border-radius: 12px; 
+    padding: 16px 20px; min-width: 220px; max-width: 300px; position: relative;
+    transition: all 0.2s; cursor: default;
+  }
+  .node:hover { border-color: #53a8f1; box-shadow: 0 0 20px rgba(83,168,241,0.15); }
+  .node .icon { font-size: 22px; margin-bottom: 6px; }
+  .node .title { font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+  .node .desc { font-size: 12px; color: #999; line-height: 1.4; }
+  .node .tag { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 6px; margin-top: 6px; font-weight: 600; }
+  
+  /* Node types */
+  .node.trigger { border-color: #e94560; }
+  .node.trigger .tag { background: #e9456022; color: #e94560; }
+  .node.process { border-color: #533483; }
+  .node.process .tag { background: #53348322; color: #a855f7; }
+  .node.condition { border-color: #f59e0b; border-style: dashed; }
+  .node.condition .tag { background: #f59e0b22; color: #f59e0b; }
+  .node.action { border-color: #10b981; }
+  .node.action .tag { background: #10b98122; color: #10b981; }
+  .node.output { border-color: #53a8f1; }
+  .node.output .tag { background: #53a8f122; color: #53a8f1; }
+  
+  /* Connectors */
+  .arrow { 
+    width: 40px; height: 2px; background: #333; position: relative; flex-shrink: 0;
+  }
+  .arrow::after { 
+    content: '▸'; position: absolute; right: -4px; top: -9px; color: #555; font-size: 14px;
+  }
+  .arrow-down {
+    width: 2px; height: 30px; background: #333; margin-left: 110px; position: relative;
+  }
+  .arrow-down::after {
+    content: '▾'; position: absolute; bottom: -12px; left: -5px; color: #555; font-size: 14px;
+  }
+  
+  /* Branch label */
+  .branch-label {
+    font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 8px;
+    background: #1a1a2e; border: 1px solid #333; margin: 0 8px; white-space: nowrap;
+  }
+  .branch-label.yes { color: #10b981; border-color: #10b98155; }
+  .branch-label.no { color: #e94560; border-color: #e9456055; }
+  .branch-label.match { color: #f59e0b; border-color: #f59e0b55; }
+  
+  /* Section dividers */
+  .section { margin: 32px 0 16px; padding: 8px 16px; border-left: 3px solid #533483; }
+  .section h2 { font-size: 15px; color: #a855f7; font-weight: 700; }
+  .section p { font-size: 12px; color: #666; margin-top: 2px; }
+
+  /* Legend */
+  .legend { 
+    display: flex; gap: 20px; padding: 16px 32px; background: #16213e; 
+    border-top: 1px solid #0f3460; flex-wrap: wrap; position: fixed; bottom: 0; left: 0; right: 0;
+  }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  .notes { background: #0f3460; border-radius: 8px; padding: 12px 16px; margin: 24px 0; max-width: 600px; }
+  .notes h3 { font-size: 13px; color: #53a8f1; margin-bottom: 6px; }
+  .notes ul { font-size: 12px; color: #999; padding-left: 16px; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>📧 CAPCO Email → Task Pipeline</h1>
+    <div class="subtitle">CAP Design Group — Automated Project Operations</div>
+  </div>
+  <span class="badge">DRAFT v1</span>
+</div>
+
+<div class="canvas">
+
+  <!-- STAGE 1: INGESTION -->
+  <div class="section">
+    <h2>Stage 1 — Email Ingestion</h2>
+    <p>Monitor inbox, classify, and archive</p>
+  </div>
+
+  <div class="flow-row">
+    <div class="node trigger">
+      <div class="icon">📨</div>
+      <div class="title">Email Arrives</div>
+      <div class="desc">IMAP polling on agent@capcofire.com (or jk@). New unread message detected.</div>
+      <span class="tag">TRIGGER</span>
+    </div>
+    <div class="arrow"></div>
+    <div class="node process">
+      <div class="icon">🔍</div>
+      <div class="title">Parse & Extract</div>
+      <div class="desc">From, subject, body, attachments. Strip signatures/threads. Extract addresses, project names, dates.</div>
+      <span class="tag">PROCESS</span>
+    </div>
+    <div class="arrow"></div>
+    <div class="node condition">
+      <div class="icon">🏗️</div>
+      <div class="title">Is Project-Related?</div>
+      <div class="desc">Match against known projects (address, client name, project #). Check for keywords: sprinkler, alarm, NFPA, plans, permit, inspection.</div>
+      <span class="tag">CONDITION</span>
+    </div>
+  </div>
+
+  <!-- Branch: Not project related -->
+  <div class="flow-row indented-2">
+    <span class="branch-label no">NO</span>
+    <div class="arrow"></div>
+    <div class="node action">
+      <div class="icon">📁</div>
+      <div class="title">Skip / Flag for Jay</div>
+      <div class="desc">Leave in inbox or send Slack summary. "Unmatched email from [sender] — [subject]"</div>
+      <span class="tag">ACTION</span>
+    </div>
+  </div>
+
+  <!-- Branch: Yes project related -->
+  <div class="flow-row indented-2">
+    <span class="branch-label yes">YES</span>
+    <div class="arrow"></div>
+    <div class="node process">
+      <div class="icon">🔗</div>
+      <div class="title">Match to Project</div>
+      <div class="desc">Link to existing project record. If new project detected, create draft record + flag Jay.</div>
+      <span class="tag">PROCESS</span>
+    </div>
+    <div class="arrow"></div>
+    <div class="node action">
+      <div class="icon">📥</div>
+      <div class="title">Archive Email</div>
+      <div class="desc">Move to processed folder. Store full content + attachments in project record.</div>
+      <span class="tag">ACTION</span>
+    </div>
+  </div>
+
+  <!-- STAGE 2: CLASSIFICATION -->
+  <div class="section">
+    <h2>Stage 2 — Intent Classification</h2>
+    <p>AI determines what needs to happen</p>
+  </div>
+
+  <div class="flow-row">
+    <div class="node process">
+      <div class="icon">🧠</div>
+      <div class="title">AI Classification</div>
+      <div class="desc">Analyze email content against action categories. Determine urgency (now / this week / backlog). Extract specific asks.</div>
+      <span class="tag">PROCESS</span>
+    </div>
+    <div class="arrow"></div>
+    <div class="node condition">
+      <div class="icon">📋</div>
+      <div class="title">What Type?</div>
+      <div class="desc">Route based on detected intent. Multiple intents = multiple tasks.</div>
+      <span class="tag">CONDITION</span>
+    </div>
+  </div>
+
+  <div class="flow-row indented">
+    <span class="branch-label match">INFO REQUEST</span>
+    <div class="arrow"></div>
+    <div class="node action">
+      <div class="icon">💬</div>
+      <div class="title">Draft Response</div>
+      <div class="desc">AI drafts reply using code knowledge + project context. Queue for Jay's approval or auto-send if low-risk.</div>
+      <span class="tag">ACTION</span>
+    </div>
+  </div>
+
+  <div class="flow-row indented">
+    <span class="branch-label match">DOCUMENT NEEDED</span>
+    <div class="arrow"></div>
+    <div class="node action">
+      <div class="icon">📝</div>
+      <div class="title">Generate Document Task</div>
+      <div class="desc">Narrative, affidavit, NFPA 241, letter. Create magic link to one-pager with pre-filled fields + blanks for Jay.</div>
+      <span class="tag">ACTION</span>
+    </div>
+  </div>
+
+  <div class="flow-row indented">
+    <span class="branch-label match">DESIGN WORK</span>
+    <div class="arrow"></div>
+    <div class="node action">
+      <div class="icon">📐</div>
+      <div class="title">Create Design Task</div>
+      <div class="desc">Assign to designer pipeline. Set deadline. Track in GoHighLevel. Auto-nag if overdue.</div>
+      <span class="tag">ACTION</span>
+    </div>
+  </div>
+
+  <div class="flow-row indented">
+    <span class="branch-label match">REVIEW / APPROVAL</span>
+    <div class="arrow"></div>
+    <div class="node action">
+      <div class="icon">✅</div>
+      <div class="title">Queue for Jay Review</div>
+      <div class="desc">Plans submitted for stamping, inspection reports to sign off. High-priority Slack + magic link.</div>
+      <span class="tag">ACTION</span>
+    </div>
+  </div>
+
+  <div class="flow-row indented">
+    <span class="branch-label match">SCHEDULING</span>
+    <div class="arrow"></div>
+    <div class="node action">
+      <div class="icon">📅</div>
+      <div class="title">Calendar / Coordination</div>
+      <div class="desc">Site visits, inspections, meetings. Check availability, propose times, or confirm.</div>
+      <span class="tag">ACTION</span>
+    </div>
+  </div>
+
+  <!-- STAGE 3: DELIVERY -->
+  <div class="section">
+    <h2>Stage 3 — Task Delivery</h2>
+    <p>Magic links via SMS/Slack → one-pager actions</p>
+  </div>
+
+  <div class="flow-row">
+    <div class="node output">
+      <div class="icon">🔗</div>
+      <div class="title">Generate Magic Link</div>
+      <div class="desc">Unique URL → one-pager showing: task summary, email context, pre-filled data, action buttons (approve/edit/assign/reply).</div>
+      <span class="tag">OUTPUT</span>
+    </div>
+    <div class="arrow"></div>
+    <div class="node condition">
+      <div class="icon">📱</div>
+      <div class="title">Delivery Channel</div>
+      <div class="desc">Based on urgency and Jay's preferences.</div>
+      <span class="tag">CONDITION</span>
+    </div>
+  </div>
+
+  <div class="flow-row indented">
+    <span class="branch-label match">URGENT</span>
+    <div class="arrow"></div>
+    <div class="node output">
+      <div class="icon">📲</div>
+      <div class="title">SMS via Twilio</div>
+      <div class="desc">"New task: [Project] — [Summary]. Review: [magic link]"</div>
+      <span class="tag">OUTPUT</span>
+    </div>
+  </div>
+
+  <div class="flow-row indented">
+    <span class="branch-label match">NORMAL</span>
+    <div class="arrow"></div>
+    <div class="node output">
+      <div class="icon">💬</div>
+      <div class="title">Slack Message</div>
+      <div class="desc">Posted to #tasks or DM. Rich preview with project, sender, action needed. Button → magic link.</div>
+      <span class="tag">OUTPUT</span>
+    </div>
+  </div>
+
+  <div class="flow-row indented">
+    <span class="branch-label match">BATCH</span>
+    <div class="arrow"></div>
+    <div class="node output">
+      <div class="icon">📊</div>
+      <div class="title">Daily Digest</div>
+      <div class="desc">Morning summary: open tasks, overdue items, today's deadlines. One link per item.</div>
+      <span class="tag">OUTPUT</span>
+    </div>
+  </div>
+
+  <!-- STAGE 4: MAGIC LINK PAGE -->
+  <div class="section">
+    <h2>Stage 4 — One-Pager (Magic Link)</h2>
+    <p>What Jay sees when he taps the link</p>
+  </div>
+
+  <div class="flow-row">
+    <div class="node output" style="min-width: 320px; max-width: 400px;">
+      <div class="icon">📄</div>
+      <div class="title">Task One-Pager</div>
+      <div class="desc">
+        <strong>Header:</strong> Project name, address, client<br>
+        <strong>Context:</strong> Original email (collapsed)<br>
+        <strong>AI Summary:</strong> "Client requesting updated narrative for permit resubmission"<br>
+        <strong>Pre-filled:</strong> Template fields populated from project data<br>
+        <strong>Blanks:</strong> Project-specific fields Jay needs to fill<br>
+        <strong>Actions:</strong> ✅ Approve &amp; Send · ✏️ Edit · 👷 Assign to Designer · 💬 Reply to Sender · ❌ Dismiss
+      </div>
+      <span class="tag">ONE-PAGER</span>
+    </div>
+    <div class="arrow"></div>
+    <div class="node action">
+      <div class="icon">⚡</div>
+      <div class="title">Execute Action</div>
+      <div class="desc">Jay taps a button → system executes. Document generated, email sent, task assigned, designer notified. Loop closed.</div>
+      <span class="tag">ACTION</span>
+    </div>
+  </div>
+
+  <!-- STAGE 5: DESIGNER PIPELINE -->
+  <div class="section">
+    <h2>Stage 5 — Designer Pipeline (Background)</h2>
+    <p>Automated tracking and nagging</p>
+  </div>
+
+  <div class="flow-row">
+    <div class="node process">
+      <div class="icon">👷</div>
+      <div class="title">Task Assigned</div>
+      <div class="desc">Designer gets Slack notification + magic link with scope, deadline, reference docs.</div>
+      <span class="tag">PROCESS</span>
+    </div>
+    <div class="arrow"></div>
+    <div class="node condition">
+      <div class="icon">⏰</div>
+      <div class="title">Deadline Check</div>
+      <div class="desc">Daily cron: is task overdue? Approaching deadline? No update in X days?</div>
+      <span class="tag">CONDITION</span>
+    </div>
+    <div class="arrow"></div>
+    <div class="node action">
+      <div class="icon">🔔</div>
+      <div class="title">Auto-Nag</div>
+      <div class="desc">Escalating: friendly reminder → firm follow-up → flag Jay. "Hey [designer], [project] is due tomorrow."</div>
+      <span class="tag">ACTION</span>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h3>💡 Integration Notes</h3>
+    <ul>
+      <li><strong>SMS:</strong> Twilio ($0.0079/msg) — no Linqto needed. Simple API, works immediately.</li>
+      <li><strong>Magic Links:</strong> Hosted on your existing Railway/Astro stack. Auth via unique token in URL (expires 7 days).</li>
+      <li><strong>GoHighLevel:</strong> API for pipeline stages, contact lookup, opportunity tracking.</li>
+      <li><strong>Email:</strong> Already have IMAP on agent@capcofire.com. Can add jk@ if needed.</li>
+      <li><strong>AI:</strong> Classification + drafting via Claude API (Sonnet for cost efficiency).</li>
+      <li><strong>Project DB:</strong> Supabase — already have it. New tables for tasks, projects, magic links.</li>
+    </ul>
+  </div>
+
+  <!-- ============================================ -->
+  <!-- CLIENT-FACING PIPELINE -->
+  <!-- ============================================ -->
+
+  <div class="section" style="border-left-color: #e94560; margin-top: 56px;">
+    <h2 style="color: #e94560;">Client-Facing Pipeline</h2>
+    <p>Automatic outreach when something's missing or needed from the client</p>
+  </div>
+
+  <!-- STAGE C1: Project Submission -->
+  <div class="flow-row">
+    <div class="node trigger">
+      <div class="icon">📋</div>
+      <div class="title">New Project Submitted</div>
+      <div class="desc">Client submits via intake form, email, or phone (Jay enters manually). Project record created.</div>
+      <span class="tag">TRIGGER</span>
+    </div>
+    <div class="arrow"></div>
+    <div class="node process">
+      <div class="icon">✅</div>
+      <div class="title">Requirements Checklist</div>
+      <div class="desc">AI checks project type against required docs matrix:<br>
+        • Floor plans (PDF/DWG)<br>
+        • Occupancy info<br>
+        • Building height / stories<br>
+        • Water supply data<br>
+        • Existing system info (retrofit)<br>
+        • AHJ submission forms
+      </div>
+      <span class="tag">PROCESS</span>
+    </div>
+    <div class="arrow"></div>
+    <div class="node condition">
+      <div class="icon">📎</div>
+      <div class="title">Missing Docs?</div>
+      <div class="desc">Compare what was provided vs. what's required for this project type.</div>
+      <span class="tag">CONDITION</span>
+    </div>
+  </div>
+
+  <div class="flow-row indented-2">
+    <span class="branch-label yes">COMPLETE</span>
+    <div class="arrow"></div>
+    <div class="node action">
+      <div class="icon">🚀</div>
+      <div class="title">Project Kicks Off</div>
+      <div class="desc">Auto-assign to designer pipeline. Client gets confirmation: "We have everything, work begins [date]."</div>
+      <span class="tag">ACTION</span>
+    </div>
+  </div>
+
+  <div class="flow-row indented-2">
+    <span class="branch-label no">GAPS FOUND</span>
+    <div class="arrow"></div>
+    <div class="node output">
+      <div class="icon">🔗</div>
+      <div class="title">Generate Client Magic Link</div>
+      <div class="desc">One-pager built dynamically:<br>
+        • Project name & address (header)<br>
+        • What we have ✅ (greyed out)<br>
+        • What we need ❌ (highlighted)<br>
+        • Upload zone per missing item<br>
+        • Optional notes field<br>
+        • No login. No account. Just the link.
+      </div>
+      <span class="tag">OUTPUT</span>
+    </div>
+  </div>
+
+  <!-- Client notification -->
+  <div class="section" style="border-left-color: #f59e0b;">
+    <h2 style="color: #f59e0b;">Client Notification</h2>
+    <p>Reach them where they are — SMS first, email backup</p>
+  </div>
+
+  <div class="flow-row">
+    <div class="node condition">
+      <div class="icon">📱</div>
+      <div class="title">Has Mobile Number?</div>
+      <div class="desc">Check client record for cell phone.</div>
+      <span class="tag">CONDITION</span>
+    </div>
+  </div>
+
+  <div class="flow-row indented">
+    <span class="branch-label yes">YES</span>
+    <div class="arrow"></div>
+    <div class="node output">
+      <div class="icon">📲</div>
+      <div class="title">SMS via Twilio</div>
+      <div class="desc">"Hi [name], we need a few items for [project address] to get started. Tap here: [magic link]"<br><br>Short, friendly, one tap.</div>
+      <span class="tag">OUTPUT</span>
+    </div>
+  </div>
+
+  <div class="flow-row indented">
+    <span class="branch-label no">NO / ALSO</span>
+    <div class="arrow"></div>
+    <div class="node output">
+      <div class="icon">📧</div>
+      <div class="title">Email with Magic Link</div>
+      <div class="desc">Clean HTML email: project header, checklist of what's needed, big CTA button → magic link page.</div>
+      <span class="tag">OUTPUT</span>
+    </div>
+  </div>
+
+  <!-- Client completes upload -->
+  <div class="section" style="border-left-color: #10b981;">
+    <h2 style="color: #10b981;">Client Completes Upload</h2>
+    <p>Files come in → project unblocks automatically</p>
+  </div>
+
+  <div class="flow-row">
+    <div class="node trigger">
+      <div class="icon">📤</div>
+      <div class="title">Client Uploads Files</div>
+      <div class="desc">Client taps link, drops files, hits submit. Files go straight to Supabase storage under project folder.</div>
+      <span class="tag">TRIGGER</span>
+    </div>
+    <div class="arrow"></div>
+    <div class="node process">
+      <div class="icon">🔍</div>
+      <div class="title">Validate Uploads</div>
+      <div class="desc">Check file types (PDF, DWG, images). Basic sanity: is this actually floor plans? Right page count? Not corrupted?</div>
+      <span class="tag">PROCESS</span>
+    </div>
+    <div class="arrow"></div>
+    <div class="node condition">
+      <div class="icon">✅</div>
+      <div class="title">All Requirements Met?</div>
+      <div class="desc">Re-check the full checklist. Everything green?</div>
+      <span class="tag">CONDITION</span>
+    </div>
+  </div>
+
+  <div class="flow-row indented">
+    <span class="branch-label yes">YES</span>
+    <div class="arrow"></div>
+    <div class="node action">
+      <div class="icon">🚀</div>
+      <div class="title">Auto-Kick Off</div>
+      <div class="desc">Project moves to active. Designer assigned. Jay gets Slack: "[Project] is ready — all docs received."<br>Client gets: "Thanks! We're on it."</div>
+      <span class="tag">ACTION</span>
+    </div>
+  </div>
+
+  <div class="flow-row indented">
+    <span class="branch-label no">STILL MISSING</span>
+    <div class="arrow"></div>
+    <div class="node action">
+      <div class="icon">🔄</div>
+      <div class="title">Update & Re-notify</div>
+      <div class="desc">Magic link updates to show what's done ✅ and what's still needed. Client gets a follow-up in 48h if not complete.</div>
+      <span class="tag">ACTION</span>
+    </div>
+  </div>
+
+  <!-- Auto-nag -->
+  <div class="flow-row" style="margin-top: 24px;">
+    <div class="node process" style="min-width: 320px; max-width: 450px;">
+      <div class="icon">⏰</div>
+      <div class="title">Client Follow-Up Cadence</div>
+      <div class="desc">
+        <strong>Day 0:</strong> Initial SMS/email with magic link<br>
+        <strong>Day 2:</strong> Friendly reminder — "Just checking in, we still need [X]"<br>
+        <strong>Day 5:</strong> Firmer — "Your project is on hold until we receive [X]"<br>
+        <strong>Day 10:</strong> Flag Jay — "Client unresponsive on [project], your call"<br><br>
+        All automated. Jay only gets involved if client ghosts.
+      </div>
+      <span class="tag">PROCESS</span>
+    </div>
+  </div>
+
+  <div class="notes" style="max-width: 700px; margin-top: 32px;">
+    <h3>🎯 Client Experience Philosophy</h3>
+    <ul>
+      <li><strong>Zero friction:</strong> No accounts, no passwords, no portals. Tap link → do the thing → done.</li>
+      <li><strong>One-pagers only:</strong> Client never sees a dashboard. Each link = one focused task.</li>
+      <li><strong>Smart pre-fill:</strong> If we know the address, occupancy type, etc. — it's already there.</li>
+      <li><strong>Mobile-first:</strong> These pages must work perfectly on a phone. Contractors are on-site, not at desks.</li>
+      <li><strong>Upload = done:</strong> No confirmation emails to reply to, no "we'll get back to you." Instant feedback.</li>
+      <li><strong>Twilio SMS cost:</strong> ~$0.0079/message sent, ~$0.0075/received. A phone number is $1/month. Trivial.</li>
+    </ul>
+  </div>
+
+  <div style="height: 80px;"></div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#e94560;"></div> Trigger</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#533483;"></div> Process</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f59e0b;"></div> Condition</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#10b981;"></div> Action</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#53a8f1;"></div> Output</div>
+  <div style="margin-left: auto; font-size: 12px; color: #666;">CAP Design Group — Draft Pipeline v1</div>
+</div>
+
+</body>
+</html>
