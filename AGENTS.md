@@ -67,6 +67,57 @@ Capture what matters. Decisions, context, things to remember. Skip the secrets u
 - Don't run destructive commands without asking.
 - `trash` > `rm` (recoverable beats gone forever)
 - When in doubt, ask.
+- **Never commit secrets to Git** — Always check `git diff` for API keys/tokens/passwords before pushing
+- **Auto-sync important changes** — When learning new logic, client info, or rules that need to be shared across agents:
+  1. Update the appropriate file (USER.md, SOUL.md, MEMORY.md, etc.)
+  2. Commit with a descriptive message
+  3. Push so other agents can pull the latest
+- Use environment variables for all secrets, never hardcode them
+
+## 🔐 Secrets Management
+
+Before ANY `git push`, you MUST:
+
+1. **Scan staged files** for these patterns:
+   - `api_key`, `token`, `password`, `secret`, `credential`, `oauth`
+   - Strings that look like keys: `sk_live_*`, `pk_live_*`, `eyJ*` (JWT)
+   - `.env` files, `*.pem`, `*.key`, `.tokens`, `.secrets`
+
+2. **Check new files** being added — verify none are secret files
+
+3. **Verify `.env` is in `.gitignore`** — if not, add it
+
+### If You Find a Secret
+
+- **Do NOT commit** — Tell the user immediately
+- If already committed: Use `git filter-repo` to rewrite history:
+  ```bash
+  git filter-repo --path .secrets --path .tokens --path <filepath> --invert-paths --force
+  git push -f origin main
+  ```
+
+### Environment Variables
+
+| Platform | How to Store |
+|----------|--------------|
+| Railway | Dashboard → Variables (NOT in .env files) |
+| Local dev | `.env` file (must be gitignored) |
+| OpenClaw workspace | `~/.openclaw/workspace/` (gitignored by default) |
+
+### Files That Must Be Gitignored
+
+```
+.env
+.env.local
+.env.*.local
+.tokens
+.secrets
+*.pem
+*.key
+*.p12
+.crater-api-token
+.crater-api-token-*
+```
 
 ## External vs Internal
 

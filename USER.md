@@ -34,6 +34,8 @@ _Learn about the person you're helping. Update this as you go._
 - **Paulino Auto Group** — Railway project
 - **PhaseLine Painting** — Railway project
 - **Luxe Meds** — Railway project
+- **Paradigm Hydroseed** — separate company from Paradigm Landscape
+- **Paradigm Landscape** — separate company from Paradigm Hydroseed
 - **~18 WordPress sites** — currently on Kinsta, need migration to Railway
 
 ---
