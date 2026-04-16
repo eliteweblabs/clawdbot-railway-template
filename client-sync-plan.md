@@ -1,104 +1,85 @@
-# Client Sync: Supabase ↔ Crater
+# Client Sync: contact-api ↔ Crater ↔ Supabase
+
+## Architecture (Updated)
+
+The **contact-api** is now the single source of truth for client identity.
+All systems link back to it via `contact_links` (see `CONTACT-API.md`).
+
+```
+                  ┌──────────────┐
+                  │  contact-api │  ← canonical identity
+                  │  (Postgres)  │
+                  └──────┬───────┘
+                         │ contact_links
+            ┌────────────┼────────────┐
+            ▼            ▼            ▼
+       ┌─────────┐ ┌──────────┐ ┌──────────┐
+       │ Crater  │ │ Cal.com  │ │ Supabase │
+       │ (MySQL) │ │ (Postgres)│ │ (Postgres)│
+       └─────────┘ └──────────┘ └──────────┘
+```
 
 ## Problem
-- Crater (invoicing) and Supabase (CMS) both have client data
-- Manual duplication leads to inconsistencies 
-- Need automatic sync to prevent duplicates
+- Crater (invoicing), Cal.com (booking), and Supabase (CMS) each create client records independently
+- Slight name/email variations cause duplicates
+- contact-api resolves this with fuzzy matching (pg_trgm)
 
 ## Data Sources
+
+### contact-api (canonical)
+- Postgres DB with `contacts`, `contact_aliases`, `contact_links` tables
+- Fuzzy resolution via email → phone → name similarity
+- Tracks which external IDs belong to each contact
 
 ### Supabase: `profiles` + `auth.users`
 - Authenticated client accounts (CMS users with role='Client')
 - Fields: id (UUID), companyName, firstName, lastName, email, phone, role
-- Linked to auth.users for authentication data
 
-### Crater: `customers` 
+### Crater: `customers` (MySQL)
 - Billing/invoicing client records
 - Fields: name, email, phone, contact_name, company_name, website
 
+### Cal.com: `bookings`
+- Scheduling records linked to attendee email/name
+- Already wired — calcom-booking-api calls contact-api/resolve automatically
+
 ## Sync Strategy
 
-### Required: Bidirectional Sync (MANDATORY)
-**Why:** Customers need Supabase profiles for magic link invoice access
+### Phase 1: contact-api as hub (DONE)
+- calcom-booking-api resolves contacts before booking ✅
+- crater-invoice.sh resolves contacts before invoicing ✅
+- All new interactions flow through contact-api
 
-**Flow 1:** Supabase profiles → Crater customers
-- Existing authenticated clients become billing customers
+### Phase 2: Backfill existing clients
+1. Export Crater customers → resolve each against contact-api → create/link
+2. Export Supabase profiles (role='Client') → resolve → create/link
+3. Import Harvest dashboard clients → resolve → create/link
 
-**Flow 2:** Crater customers → Supabase profiles 
-- New customers get Supabase profiles for invoice portal access
-- Magic links require auth.users + profiles records
-
-**Critical:** Every Crater customer MUST have a Supabase profile
+### Phase 3: Bidirectional sync
+**Flow 1:** New contact-api entry → create in Crater + Supabase
+**Flow 2:** New Crater customer → resolve in contact-api → link
+**Flow 3:** New Supabase profile → resolve in contact-api → link
 
 ## Field Mapping
 
-| Supabase | Crater | Logic |
-|----------|---------|--------|
-| profiles.firstName + lastName | contact_name | Concatenate with space |
-| profiles.companyName | company_name | Direct mapping |
-| profiles.companyName | name | Use company as primary customer name |
-| auth.users.email | email | Direct mapping from auth table |
-| profiles.phone | phone | Direct mapping |
-| profiles.id (UUID) | (custom field) | Store Supabase UUID for sync tracking |
-
-**Sync Criteria:** Only profiles where `role = 'Client'`
-
-**Supabase Query:**
-```sql
-SELECT 
-    p.id,
-    p."companyName",
-    p."firstName", 
-    p."lastName",
-    p.phone,
-    p."createdAt",
-    u.email
-FROM profiles p
-JOIN auth.users u ON p.id = u.id 
-WHERE p.role = 'Client'
-```
-
-## Implementation Options
-
-### A. Bidirectional Sync Script
-```python
-def sync_clients_bidirectional():
-    # FLOW 1: Supabase → Crater
-    # 1. Get Supabase profiles (role='Client') + auth.users
-    # 2. Create missing customers in Crater
-    # 3. Update existing customers with latest info
-    
-    # FLOW 2: Crater → Supabase  
-    # 4. Get Crater customers without Supabase profiles
-    # 5. Create auth.users records (for magic links)
-    # 6. Create profiles with role='Client'
-    # 7. Send magic link invitation emails
-```
-
-### B. Webhook-Driven (Real-time)
-- Supabase trigger on INSERT → webhook → Crater API
-- Instant sync when contact form submitted
-
-### C. Database Trigger
-- PostgreSQL trigger/function 
-- Direct database-to-database sync
+| contact-api | Crater | Supabase |
+|-------------|--------|----------|
+| name | name / contact_name | firstName + lastName |
+| email | email | auth.users.email |
+| phone | phone | profiles.phone |
+| company | company_name | profiles.companyName |
+| uid | contact_links.external_id (system='crater') | contact_links.external_id (system='supabase') |
 
 ## Next Steps
 
-1. **Choose approach** (recommend Option A - API script)
-2. **Build sync script** using Crater + Supabase APIs
-3. **Test with sample data**
-4. **Set up cron job** for automated sync
-5. **Add monitoring/logging**
+1. ~~Set up contact-api~~ ✅
+2. ~~Wire into booking and invoicing flows~~ ✅
+3. **Backfill script** — iterate Crater customers, resolve+link in contact-api
+4. **Supabase sync trigger** — on new profile(role='Client'), call contact-api/resolve
+5. **Dashboard update** — generate `clients/dashboard.md` from contact-api list endpoint
 
 ## Benefits
-- ✅ **Invoice portal access** — Every customer can access invoices via magic links
-- ✅ **Single source of truth** — No data inconsistencies 
-- ✅ **No manual setup** — New customers automatically get portal access
-- ✅ **Seamless workflow** — Create customer → they get magic link → can view invoices
-- ✅ **Authentication handled** — Supabase manages magic links, sessions, security
-
-## Critical Requirements
-- Every Crater customer → Supabase profile (role='Client')
-- Every Supabase client → Crater customer
-- Magic link functionality depends on this sync working
+- Single identity across all platforms
+- Fuzzy matching catches "Todd Smith" vs "Tod Smith" vs "T. Smith"
+- Every client traceable across Crater, Cal.com, Supabase via contact_links
+- Merge endpoint handles discovered duplicates
