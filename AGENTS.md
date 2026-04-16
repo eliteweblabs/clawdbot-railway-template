@@ -184,6 +184,16 @@ Reactions are lightweight social signals. Humans use them constantly — they sa
 
 Skills provide your tools. When you need one, check its `SKILL.md`. Keep local notes (camera names, SSH details, voice preferences) in `TOOLS.md`.
 
+### Client Identity (contact-api)
+
+Read `CONTACT-API.md` before any client-related operation. **Always resolve a contact** before creating Crater customers, booking appointments, or referencing clients in any system. The contact-api prevents duplicates via fuzzy matching.
+
+Key scripts:
+- `scripts/contact-api.sh` — resolve, create, search, link, merge contacts
+- `scripts/booking-api.sh` — availability, create, list, cancel bookings
+- `scripts/crater-invoice.sh` — creates invoices (auto-resolves contacts)
+- `scripts/create-crater-invoice.sh` — creates invoices via OpenClaw API (auto-resolves contacts)
+
 **🎭 Voice Storytelling:** If you have `sag` (ElevenLabs TTS), use voice for stories, movie summaries, and "storytime" moments! Way more engaging than walls of text. Surprise people with funny voices.
 
 **📝 Platform Formatting:**
