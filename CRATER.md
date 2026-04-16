@@ -75,4 +75,4 @@ Example recurring clients:
 - Rothco Built — $425.00/year
 - Levines Law — $425.00/year
 
-**Total: $4,825/year** (or $1,206.25/quarter)
+*Note: Always fetch current totals from the API, don't store static values.*
