@@ -64,7 +64,58 @@
 - Plan scanner page: src/pages/admin/plan-scanner.astro
 - Python plan detector API: ~/Astro/rothcobuilt/plan-detector/server.py (port 5555)
 
-## Critical Lessons (2026-03-23)
+## Critical Rules
+- **ALWAYS run `npm run build` locally first** before any commit/push — Railway deploys take 3-4 minutes and fail on broken builds
+- **ALWAYS USE THE CHEAPEST MODEL** — default to Sonnet (or whatever the cheapest available model is). Never use Opus/expensive models unless Thomas explicitly asks. He has told me this MULTIPLE times. This is a hard rule, not a suggestion.
+- **ALWAYS check for secrets/tokens** before any GitHub commit. Scan the diff for API keys, passwords, tokens, credentials. Never commit secrets to GitHub.
+- **Railway rollback**: When something breaks, Railway can deploy directly from a previous GitHub commit. Go to Railway dashboard → Deployments → find a working commit → Redeploy. This is faster than trying to fix code locally.
+
+## Secrets Management — Never Expose Credentials
+
+### Before Any Commit
+1. **Scan the diff** — Use `git diff` to review ALL changes before staging
+2. **Check for secret patterns** — Look for:
+   - API keys (sk_live_*, akia*, ghp_*)
+   - Tokens (Bearer *, xoxb-*, github_pat_*)
+   - Passwords (password=*, pwd=*, pass=*)
+   - Private keys (-----BEGIN * PRIVATE KEY-----)
+   - Database URLs (postgres://*, mysql://* with credentials)
+   - AWS credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
+3. **Never commit .env files** — Add .env to .gitignore if not already there
+4. **Use env vars for secrets** — Store in environment, never in source code
+
+### Environment Variables
+- Local secrets → `~/.bash_profile` or `~/.zshrc` (not in project dirs)
+- Railway secrets → `railway variables set KEY=value` (not in code)
+- Supabase anon key is OK to expose; service_role key is NOT
+
+### If You Accidentally Commit a Secret
+1. **STOP** — Do not push more commits
+2. **Rotate the secret immediately** — Assume it's compromised
+3. **Use git filter-repo or BFG** to rewrite history, OR
+4. **Delete the file and amend the commit**
+
+### Approved Storage Locations
+| Secret Type | Where to Store |
+|------------|---------------|
+| Railway tokens | `~/.railway/auth token` |
+| GitHub token | `~/.gh_token` or `gh auth status` |
+| Supabase keys | In project config JSON (anon key only) |
+| Database passwords | Environment variables only |
+| API keys (third-party) | Environment variables |
+
+### Red Flags — Never These Patterns
+```javascript
+// ❌ NEVER commit these:
+const API_KEY = "sk_live_abc123...";
+const DB_URL = "postgres://user:password@host/db";
+const STRIPE_SECRET = "sk_test_...";
+
+// ✅ DO this instead:
+const API_KEY = process.env.STRIPE_KEY;
+const DB_URL = process.env.DATABASE_URL;
+```
+- **Demo emails** — always use @eliteweblabs.com (has catch-all setup for testing). Never use real client domains.
 - **Follow user instructions exactly** - when they say "copy working pieces", don't rewrite from scratch
 - **Simple fixes stay simple** - don't turn 10-minute fixes into day-long rebuilds 
 - **Working > Perfect** - SimpleScan worked in 20 seconds, replacements were slower and buggier
@@ -82,7 +133,10 @@
 - AI-centric company
 - **Railway deployment:** Auto-deploys from GitHub (eliteweblabs/reave main branch)
 
-## Crater (ap.reave.app)
+## OpenClaw Instances
+- **Local claw** (this instance) — runs on blackbook (this Mac)
+- **Live claw** — separate server, has working Crater API access via different configuration
+- When Crater API fails locally, try live claw or check its config
 - Self-hosted invoicing at ap.reave.app, deployed on Railway from `eliteweblabs/crater` master branch
 - Company: "Reave App & Dev", slug: `reave`, 324 Rantoul St, Beverly MA 01915
 - MySQL: railway internal, db: railway, user: root
@@ -93,11 +147,23 @@
 - Customer portal: /reave/customer/invoices/{id}/view (requires customer login)
 - Known issue: two Railway projects exist, "Invoice Crater" should be deleted
 - All invoicing goes through Crater now — no more markdown files
+- **Crater pagination rule:** When fetching customers from Crater API (`/api/v1/customers`), always use pagination — call both page 1 and page 2 and combine results. Don't assume all results come in one page. Example:
+  - Page 1: `/api/v1/customers?page=1&per_page=50`
+  - Page 2: `/api/v1/customers?page=2&per_page=50`
 - **OpenClaw API endpoint:** POST https://ap.reave.app/api/openclaw/create-invoice
   - Token stored in ~/.openclaw/workspace/.crater-api-token
   - Creates invoices directly via HTTP (no Railway CLI needed)
   - Usage: curl with X-OpenClaw-Token header, JSON body with customer_name, items array
   - Railway env var: OPENCLAW_API_TOKEN must be set for endpoint to work
+
+## Railway Deployment
+- **Railway projects auto-deploy from GitHub commits** - push to main branch triggers deploy
+- The local `~/Astro/astro-supabase-main` repo links to Railway project "solid-boston" but that seems misconfigured (it's actually the CAPCO repo)
+
+## Plausible Analytics
+- Self-hosted at: plausible-analytics-ce-production-6fd8.up.railway.app
+- Site ID used: rukqo1-vorriv-higMyc (solid-boston)
+- **TODO:** Set up heartbeat to check traffic reports and alert on significant changes
 
 ## iMessage
 - chat.db at ~/Library/Messages/chat.db (191K messages)
@@ -105,7 +171,51 @@
 - Workaround: Thomas runs sqlite3 commands in Terminal, saves to file, I read it
 - Older messages may not sync to Mac — iCloud sync issue to investigate
 
-## Me
+## Pre-Launch Checklist (Global Template)
+
+Use this checklist before launching ANY website (client projects, internal projects, etc.)
+
+### SEO Essentials
+- [ ] **Google Search Console** - Verify ownership + submit sitemap
+- [ ] **Bing Webmaster Tools** - Verify ownership
+- [ ] **Google Analytics 4** - Create property, add tracking to Layout
+- [ ] **XML Sitemap** - Generate + submit to search engines
+- [ ] **Robots.txt** - Verify exists and allows crawlers
+- [ ] **Meta Tags** - All pages have unique title + description
+- [ ] **Open Graph** - og:image for social sharing (1200x630)
+- [ ] **Favicon** - Configured in manifest.json
+
+### Local SEO
+- [ ] **Google Business Profile** - Claim/optimize (if local business)
+- [ ] **NAP Consistency** - Name, Address, Phone consistent everywhere
+
+### Technical
+- [ ] **SSL** - Ensure HTTPS working
+- [ ] **PageSpeed** - Test with PageSpeed Insights (90+ mobile/desktop)
+- [ ] **Mobile Responsive** - Test all pages
+- [ ] **404 Page** - Custom 404 page exists
+- [ ] **Images** - Compressed, WebP, lazy-loaded where appropriate
+- [ ] **Analytics** - Plausible (privacy-focused) or GA4
+
+### Content
+- [ ] **Privacy Policy** - Exists (if collecting any data)
+- [ ] **Terms of Service** - Exists
+- [ ] **Contact Info** - Consistent across all pages
+- [ ] **Social Links** - Updated in footer
+
+### Post-Launch
+- [ ] **Request Indexing** - Submit to Google
+- [ ] **Search Results** - Check after 1 week
+- [ ] **Analytics** - Set up alerts for errors/traffic
+
+---
+
+**Quick Reference:**
+- Railway: use `railway status` + `railway domain`
+- Sites typically use: Astro + Supabase + Tailwind on Railway
+- DNS: name.com
+- Email: Google Workspace + Resend
+- Always use @eliteweblabs.com for test emails
 - Name: Tibby 🐾
 - First session: 2026-03-21
 - **ALWAYS USE THE CHEAPEST MODEL** — default to Sonnet (or whatever the cheapest available model is). Never use Opus/expensive models unless Thomas explicitly asks. He has told me this MULTIPLE times. This is a hard rule, not a suggestion.
