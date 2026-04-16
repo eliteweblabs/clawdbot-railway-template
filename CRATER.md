@@ -59,7 +59,18 @@ Headers:
   X-OpenClaw-Token: <token>
 ```
 
-## Environment Variables (Railway)
-- `OPENCLAW_API_TOKEN` - Token for OpenClaw endpoints
-- `STRIPE_KEY` - Stripe publishable key
-- `STRIPE_SECRET` - Stripe secret key
+## Recurring Invoices
+- **Endpoint:** `GET /api/v1/recurring-invoices`
+- **Frequency:** Cron format - `0 0 1 5 *` = yearly (May 1st), `0 0 1 */3 *` = quarterly
+
+Example recurring clients:
+- Green Planet Pest Control — $425.00/year
+- Life Qi Holistic Medicine — $425.00/year
+- Paradigm Landscape — $425.00/year
+- Masonic Health System — $250.00/quarter
+- All Auto Financial — $425.00/year
+- Sams Catch Basin Cleaning — $425.00/year
+- Tyler Associates Inc. — $425.00/year
+- DPM Design and Construction — $425.00/year
+- Rothco Built — $425.00/year
+- Levines Law — $425.00/year
