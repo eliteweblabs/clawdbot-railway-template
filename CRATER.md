@@ -29,9 +29,8 @@ Many endpoints paginate. Always check for Page 2:
 ```
 
 ## Common Issues
-1. **Missing customers** - Check pagination (default shows only 10)
-2. **Total is in cents** - Divide by 100 for dollar amount
-3. **No customers endpoint** - Falls back to invoices to get client list
+1. **Missing data** - Check pagination (default shows only 10 per page)
+2. **Amount in cents** - Divide by 100 for dollar amount
 
 ## Custom Endpoints (OpenClaw)
 
