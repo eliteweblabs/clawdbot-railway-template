@@ -74,3 +74,5 @@ Example recurring clients:
 - DPM Design and Construction — $425.00/year
 - Rothco Built — $425.00/year
 - Levines Law — $425.00/year
+
+**Total: $4,825/year** (or $1,206.25/quarter)
