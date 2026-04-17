@@ -28,7 +28,18 @@ Many endpoints paginate. Always check for Page 2:
 /api/v1/customers?page=2&per_page=50
 ```
 
+## Client Matching
+When a client name is provided that doesn't exactly match, try fuzzy matching:
+- "Todd" → Green Planet Pest Control (Todd is the contact)
+- "Paradigm" → Check both Paradigm Hydroseed and Paradigm Landscape
+- "Paradigm hydro" → Paradigm Hydroseed
+- "Paradigm landscape" → Paradigm Landscape
+
+Always confirm with user if uncertain.
+
 ## Common Issues
+1. **Missing data** - Check pagination (default shows only 10 per page)
+2. **Amount in cents** - Divide by 100 for dollar amount
 1. **Missing data** - Check pagination (default shows only 10 per page)
 2. **Amount in cents** - Divide by 100 for dollar amount
 
