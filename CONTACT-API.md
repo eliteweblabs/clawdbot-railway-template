@@ -78,6 +78,23 @@ MATCH=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)
 scripts/crater-invoice.sh "DPM Design" "Web maintenance" "Monthly retainer" 450 "dpm@example.com"
 ```
 
+### Workflow: Checking Calendar / Upcoming Meetings
+
+When the user asks "what meetings do I have?", "who's on my calendar tomorrow?", "any appointments this week?", etc. — use the booking list:
+
+```bash
+# List upcoming bookings (all future bookings, sorted by time)
+scripts/booking-api.sh list upcoming
+
+# List recent bookings (past 30 days + future)
+scripts/booking-api.sh list
+
+# Get details on a specific booking
+scripts/booking-api.sh get <uid>
+```
+
+The response includes attendee name, email, start/end time, title, and status. Filter cancelled bookings when presenting to the user.
+
 ### Workflow: Booking an Appointment
 
 The `calcom-booking-api` already calls `contact-api/resolve` automatically during `POST /api/booking/create`. If a possible match is returned, the booking API returns `needsConfirmation: true` with candidates — present these to the human.
@@ -88,6 +105,19 @@ scripts/booking-api.sh availability
 
 # Create booking (contact resolution happens server-side)
 scripts/booking-api.sh create "Todd Smith" "todd@example.com" "2026-04-20T10:00:00"
+```
+
+### Workflow: Cancel / Reschedule
+
+```bash
+# Cancel a booking
+scripts/booking-api.sh cancel <uid> "optional reason"
+
+# Reschedule to a new time
+scripts/booking-api.sh reschedule <uid> "2026-04-25T14:00:00"
+
+# List event types (to see what's available)
+scripts/booking-api.sh event-types
 ```
 
 ### Cross-System Links
