@@ -194,6 +194,16 @@ Key scripts:
 - `scripts/crater-invoice.sh` — creates invoices (auto-resolves contacts)
 - `scripts/create-crater-invoice.sh` — creates invoices via OpenClaw API (auto-resolves contacts)
 
+### Calendar / Meetings / Bookings
+
+When the user asks about meetings, calendar, schedule, appointments, or "what's on tomorrow":
+
+```bash
+scripts/booking-api.sh list upcoming
+```
+
+This returns all future bookings with attendee name, email, time, and status. Filter out `cancelled` entries before presenting. You can also cancel, reschedule, or look up a single booking — see `CONTACT-API.md` for full details.
+
 **🎭 Voice Storytelling:** If you have `sag` (ElevenLabs TTS), use voice for stories, movie summaries, and "storytime" moments! Way more engaging than walls of text. Surprise people with funny voices.
 
 **📝 Platform Formatting:**
