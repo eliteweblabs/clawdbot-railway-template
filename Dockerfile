@@ -78,6 +78,7 @@ RUN printf '%s\n' '#!/usr/bin/env bash' 'exec node /openclaw/dist/entry.js "$@"'
 
 COPY src ./src
 COPY clients ./clients
+COPY scripts ./scripts
 
 # The wrapper listens on $PORT.
 # IMPORTANT: Do not set a default PORT here.

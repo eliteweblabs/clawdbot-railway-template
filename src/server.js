@@ -1431,24 +1431,27 @@ const server = app.listen(PORT, "0.0.0.0", async () => {
     }
   }
 
-  // Sync bundled client docs from the Docker image into the persistent workspace.
-  // This ensures every deploy refreshes the bot's knowledge base automatically.
-  const bundledClients = path.join(process.cwd(), "clients");
-  const workspaceClients = path.join(WORKSPACE_DIR, "clients");
-  try {
-    if (fs.existsSync(bundledClients)) {
-      fs.mkdirSync(workspaceClients, { recursive: true });
-      for (const file of fs.readdirSync(bundledClients)) {
-        const src = path.join(bundledClients, file);
-        const dst = path.join(workspaceClients, file);
-        if (fs.statSync(src).isFile()) {
-          fs.copyFileSync(src, dst);
+  // Sync bundled directories from the Docker image into the persistent workspace.
+  // This ensures every deploy refreshes the bot's knowledge base and tools automatically.
+  for (const dir of ["clients", "scripts"]) {
+    const bundled = path.join(process.cwd(), dir);
+    const target = path.join(WORKSPACE_DIR, dir);
+    try {
+      if (fs.existsSync(bundled)) {
+        fs.mkdirSync(target, { recursive: true });
+        for (const file of fs.readdirSync(bundled)) {
+          const src = path.join(bundled, file);
+          const dst = path.join(target, file);
+          if (fs.statSync(src).isFile()) {
+            fs.copyFileSync(src, dst);
+            if (dir === "scripts") fs.chmodSync(dst, 0o755);
+          }
         }
+        console.log(`[wrapper] synced ${dir} to workspace`);
       }
-      console.log("[wrapper] synced client docs to workspace");
+    } catch (err) {
+      console.warn(`[wrapper] ${dir} sync failed: ${String(err)}`);
     }
-  } catch (err) {
-    console.warn(`[wrapper] client docs sync failed: ${String(err)}`);
   }
 
   // Sync gateway tokens in config with the current env var on every startup.
