@@ -8,6 +8,8 @@ import express from "express";
 import httpProxy from "http-proxy";
 import * as tar from "tar";
 
+import { registerGeofenceRoutes } from "./geofence.js";
+
 // Migrate deprecated CLAWDBOT_* env vars → OPENCLAW_* so existing Railway deployments
 // keep working. Users should update their Railway Variables to use the new names.
 for (const suffix of ["PUBLIC_PORT", "STATE_DIR", "WORKSPACE_DIR", "GATEWAY_TOKEN", "CONFIG_PATH"]) {
@@ -301,6 +303,11 @@ app.use(express.json({ limit: "1mb" }));
 
 // Minimal health endpoint for Railway.
 app.get("/setup/healthz", (_req, res) => res.json({ ok: true }));
+
+// Geofence webhook endpoints for iPhone Shortcuts / field techs.
+// Registered early so they bypass the dashboard Basic-auth catch-all below.
+// See src/geofence.js for details and optional GEOFENCE_TOKEN gating.
+registerGeofenceRoutes(app, { workspaceDir: WORKSPACE_DIR });
 
 async function probeGateway() {
   // Don't assume HTTP — the gateway primarily speaks WebSocket.
