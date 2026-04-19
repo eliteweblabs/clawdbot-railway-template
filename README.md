@@ -34,6 +34,35 @@ Recommended:
 
 Optional:
 - `OPENCLAW_GATEWAY_TOKEN` — if not set, the wrapper generates one (not ideal). In a template, set it using a generated secret.
+- `CLIENT_ID` — enables per-client isolation (see below). Examples: `gp`, `paulino`, `reave`, `capco`, `mavsafe`, `authentic`, `rothco`. Leave unset for a personal dev deploy.
+
+## Per-client isolation (`CLIENT_ID`)
+
+The same image deploys to many Railway services — one per client. To stop one
+client's docs and agent instructions from leaking into another's workspace,
+every deploy should set a `CLIENT_ID`.
+
+On boot, with `CLIENT_ID` set, the wrapper:
+
+1. Syncs `scripts/*` to `/data/workspace/scripts/` (universal, always).
+2. Syncs `clients/_shared/*` and `clients/<CLIENT_ID>/*` — flattened — into
+   `/data/workspace/clients/`. **No other client folders are copied.**
+3. Installs the slim `AGENTS.client.md` (~850 words) as the workspace
+   `AGENTS.md`, stripping dev-only sections (deployment validation, CLI health
+   checks, auto-push-to-GitHub rules). Saves ~1,250 tokens per turn.
+
+With `CLIENT_ID` **unset** (your own dev deploy):
+
+- `scripts/` syncs the same way.
+- `clients/` falls back to a legacy flat copy of top-level files (subfolders
+  are ignored), with a loud warning in the logs.
+- The full `AGENTS.md` is used.
+
+Adding a new client:
+
+1. Create `clients/<new-id>/` and drop in Markdown docs specific to them.
+2. Commit, push, redeploy.
+3. Set `CLIENT_ID=<new-id>` on that client's Railway service and redeploy once.
 
 Notes:
 - This template pins OpenClaw to a released version by default via Docker build arg `OPENCLAW_GIT_REF` (override if you want `main`).

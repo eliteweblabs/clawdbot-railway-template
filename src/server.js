@@ -1433,9 +1433,11 @@ const server = app.listen(PORT, "0.0.0.0", async () => {
 
   // Sync bundled directories from the Docker image into the persistent workspace.
   // This ensures every deploy refreshes the bot's knowledge base and tools automatically.
-  for (const dir of ["clients", "scripts"]) {
-    const bundled = path.join(process.cwd(), dir);
-    const target = path.join(WORKSPACE_DIR, dir);
+  //
+  // scripts/ is universal; every deploy gets the same tools.
+  {
+    const bundled = path.join(process.cwd(), "scripts");
+    const target = path.join(WORKSPACE_DIR, "scripts");
     try {
       if (fs.existsSync(bundled)) {
         fs.mkdirSync(target, { recursive: true });
@@ -1444,13 +1446,91 @@ const server = app.listen(PORT, "0.0.0.0", async () => {
           const dst = path.join(target, file);
           if (fs.statSync(src).isFile()) {
             fs.copyFileSync(src, dst);
-            if (dir === "scripts") fs.chmodSync(dst, 0o755);
+            fs.chmodSync(dst, 0o755);
           }
         }
-        console.log(`[wrapper] synced ${dir} to workspace`);
+        console.log("[wrapper] synced scripts to workspace");
       }
     } catch (err) {
-      console.warn(`[wrapper] ${dir} sync failed: ${String(err)}`);
+      console.warn(`[wrapper] scripts sync failed: ${String(err)}`);
+    }
+  }
+
+  // clients/ is CLIENT_ID-gated to prevent cross-client leakage and reduce
+  // token footprint. When CLIENT_ID is set (e.g. "gp", "paulino"), only
+  // clients/_shared/ and clients/<CLIENT_ID>/ are flattened into the workspace.
+  // When CLIENT_ID is unset, we fall back to the legacy flat copy so existing
+  // dev deploys keep working — with a loud warning.
+  {
+    const CLIENT_ID = process.env.CLIENT_ID?.trim();
+    const bundledClients = path.join(process.cwd(), "clients");
+    const targetClients = path.join(WORKSPACE_DIR, "clients");
+
+    try {
+      if (fs.existsSync(bundledClients)) {
+        fs.mkdirSync(targetClients, { recursive: true });
+
+        const copyFlat = (srcDir) => {
+          if (!fs.existsSync(srcDir) || !fs.statSync(srcDir).isDirectory()) return 0;
+          let n = 0;
+          for (const file of fs.readdirSync(srcDir)) {
+            const from = path.join(srcDir, file);
+            const to = path.join(targetClients, file);
+            if (fs.statSync(from).isFile()) {
+              fs.copyFileSync(from, to);
+              n++;
+            }
+          }
+          return n;
+        };
+
+        if (CLIENT_ID) {
+          const sharedCount = copyFlat(path.join(bundledClients, "_shared"));
+          const clientDir = path.join(bundledClients, CLIENT_ID);
+          const clientExists = fs.existsSync(clientDir) && fs.statSync(clientDir).isDirectory();
+          const clientCount = clientExists ? copyFlat(clientDir) : 0;
+          if (!clientExists) {
+            console.warn(`[wrapper] CLIENT_ID=${CLIENT_ID} has no folder under clients/ — only _shared/ was synced`);
+          }
+          console.log(`[wrapper] synced clients (CLIENT_ID=${CLIENT_ID}): ${sharedCount} shared + ${clientCount} client`);
+        } else {
+          // Legacy: flatten every top-level file in clients/ (ignores subfolders).
+          let n = 0;
+          for (const file of fs.readdirSync(bundledClients)) {
+            const src = path.join(bundledClients, file);
+            if (fs.statSync(src).isFile()) {
+              fs.copyFileSync(src, path.join(targetClients, file));
+              n++;
+            }
+          }
+          console.warn(`[wrapper] CLIENT_ID not set — synced ${n} top-level client files in legacy mode. Set CLIENT_ID in Railway Variables to isolate per client.`);
+        }
+      }
+    } catch (err) {
+      console.warn(`[wrapper] clients sync failed: ${String(err)}`);
+    }
+  }
+
+  // AGENTS.md swap: when CLIENT_ID is set, install the slim AGENTS.client.md as
+  // the workspace's AGENTS.md so client deploys get the stripped-down prompt
+  // (~53% smaller, no dev/validation/git-push sections). Your personal dev
+  // deploy (CLIENT_ID unset) keeps the full AGENTS.md.
+  {
+    const CLIENT_ID = process.env.CLIENT_ID?.trim();
+    const bundledFull = path.join(process.cwd(), "AGENTS.md");
+    const bundledClient = path.join(process.cwd(), "AGENTS.client.md");
+    const targetAgents = path.join(WORKSPACE_DIR, "AGENTS.md");
+
+    try {
+      if (CLIENT_ID && fs.existsSync(bundledClient)) {
+        fs.copyFileSync(bundledClient, targetAgents);
+        console.log("[wrapper] installed slim AGENTS.md (client mode)");
+      } else if (fs.existsSync(bundledFull)) {
+        fs.copyFileSync(bundledFull, targetAgents);
+        console.log("[wrapper] installed full AGENTS.md (dev mode)");
+      }
+    } catch (err) {
+      console.warn(`[wrapper] AGENTS.md sync failed: ${String(err)}`);
     }
   }
 
