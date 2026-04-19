@@ -1431,29 +1431,6 @@ const server = app.listen(PORT, "0.0.0.0", async () => {
     }
   }
 
-  // Sync bundled directories from the Docker image into the persistent workspace.
-  // This ensures every deploy refreshes the bot's knowledge base and tools automatically.
-  for (const dir of ["clients", "scripts"]) {
-    const bundled = path.join(process.cwd(), dir);
-    const target = path.join(WORKSPACE_DIR, dir);
-    try {
-      if (fs.existsSync(bundled)) {
-        fs.mkdirSync(target, { recursive: true });
-        for (const file of fs.readdirSync(bundled)) {
-          const src = path.join(bundled, file);
-          const dst = path.join(target, file);
-          if (fs.statSync(src).isFile()) {
-            fs.copyFileSync(src, dst);
-            if (dir === "scripts") fs.chmodSync(dst, 0o755);
-          }
-        }
-        console.log(`[wrapper] synced ${dir} to workspace`);
-      }
-    } catch (err) {
-      console.warn(`[wrapper] ${dir} sync failed: ${String(err)}`);
-    }
-  }
-
   // Sync gateway tokens in config with the current env var on every startup.
   // This prevents "gateway token mismatch" when OPENCLAW_GATEWAY_TOKEN changes
   // (e.g. Railway variable update) but the config file still has the old value.
