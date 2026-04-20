@@ -32,7 +32,8 @@ function escapeAttr(s) { return escapeHtml(s); }
 
 function mapboxStaticUrl(lat, lng, token, { width = 800, height = 480, zoom = 15 } = {}) {
   if (!token || lat == null || lng == null) return null;
-  const marker = `pin-l+10b981(${lng},${lat})`;
+  // Brand leaf-green pin.
+  const marker = `pin-l+22c55e(${lng},${lat})`;
   return `https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/${marker}/${lng},${lat},${zoom},0/${width}x${height}@2x?access_token=${encodeURIComponent(token)}`;
 }
 
@@ -91,11 +92,21 @@ function renderCard(job, idx, total, timezone, mapboxToken) {
   const phone = phoneMatch ? phoneMatch[1].replace(/[^\d+]/g, "") : null;
 
   return `<section class="card" data-uid="${escapeAttr(job.uid)}" id="job-${escapeAttr(job.uid)}">
-  <header class="card-head">
-    <div class="pager">${idx + 1} / ${total}</div>
-    <div class="time">${escapeHtml(timeRange)}${duration ? ` &middot; ${escapeHtml(duration)}` : ""}</div>
-    <div class="status">${statusChip(job.status)}</div>
+  <header class="brand">
+    <img class="brand-logo" src="https://cdn.hibuwebsites.com/90acb87a8af043869bc67e07bbc4d3a7/dms3rep/multi/green-planet-pest-control-logo.png" alt="Green Planet Pest Control" />
+    <div class="brand-text">
+      <div class="brand-name">Green Planet Pest</div>
+      <div class="brand-tag">Boston&rsquo;s Eco-Friendly Solution</div>
+    </div>
+    <div class="brand-meta">
+      <div class="pager">${idx + 1} / ${total}</div>
+      ${statusChip(job.status)}
+    </div>
   </header>
+
+  <div class="card-head">
+    <div class="time">${escapeHtml(timeRange)}${duration ? ` &middot; ${escapeHtml(duration)}` : ""}</div>
+  </div>
 
   <div class="map-wrap">
     ${mapUrl
@@ -149,11 +160,15 @@ function renderCard(job, idx, total, timezone, mapboxToken) {
   <footer class="actions">
     <button class="btn btn-in"  data-event="arrive" data-uid="${escapeAttr(job.uid)}">Check In</button>
     <button class="btn btn-out" data-event="leave"  data-uid="${escapeAttr(job.uid)}">Check Out</button>
+    <a class="dispatch" href="tel:+16175351943" aria-label="Call dispatch">
+      <span class="dispatch-label">Dispatch</span>
+      <span class="dispatch-phone">(617) 535-1943</span>
+    </a>
   </footer>
 
   <div class="nav">
-    <button class="nav-btn nav-prev" aria-label="Previous job">‹</button>
-    <button class="nav-btn nav-next" aria-label="Next job">›</button>
+    <button class="nav-btn nav-prev" aria-label="Previous job">&#8249;</button>
+    <button class="nav-btn nav-next" aria-label="Next job">&#8250;</button>
   </div>
 </section>`;
 }
@@ -165,10 +180,22 @@ function renderPage({ data, token, focusUid }) {
 
   const empty = jobs.length === 0 ? `
     <section class="card empty">
+      <header class="brand">
+        <img class="brand-logo" src="https://cdn.hibuwebsites.com/90acb87a8af043869bc67e07bbc4d3a7/dms3rep/multi/green-planet-pest-control-logo.png" alt="Green Planet Pest Control" />
+        <div class="brand-text">
+          <div class="brand-name">Green Planet Pest</div>
+          <div class="brand-tag">Boston&rsquo;s Eco-Friendly Solution</div>
+        </div>
+        <div class="brand-meta"><div class="pager">0 / 0</div></div>
+      </header>
       <div class="empty-wrap">
         <h1>No jobs today</h1>
         <p class="muted">${escapeHtml(data.date)} &middot; ${escapeHtml(data.timezone)}</p>
-        <p>Enjoy the day off, or add <code>?all=1</code> to see upcoming bookings.</p>
+        <p class="muted">Enjoy the day off, or add <code>?all=1</code> to see upcoming bookings.</p>
+        <a class="dispatch" href="tel:+16175351943" style="margin-top:24px">
+          <span class="dispatch-label">Dispatch</span>
+          <span class="dispatch-phone">(617) 535-1943</span>
+        </a>
       </div>
     </section>` : "";
 
@@ -185,20 +212,24 @@ function renderPage({ data, token, focusUid }) {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="theme-color" content="#0f172a" />
-<title>Jobs &middot; ${escapeHtml(data.date)}</title>
+<meta name="theme-color" content="#0a2730" />
+<link rel="icon" type="image/png" href="https://cdn.hibuwebsites.com/90acb87a8af043869bc67e07bbc4d3a7/dms3rep/multi/green-planet-pest-control-logo.png" />
+<link rel="apple-touch-icon" href="https://cdn.hibuwebsites.com/90acb87a8af043869bc67e07bbc4d3a7/dms3rep/multi/green-planet-pest-control-logo.png" />
+<title>Green Planet Pest &middot; Jobs &middot; ${escapeHtml(data.date)}</title>
 <style>
+  /* Green Planet Pest brand palette — pulled from greenplanetpest.com */
   :root {
-    --bg: #0b1020;
-    --card: #111827;
-    --card-2: #1f2937;
-    --text: #f8fafc;
-    --muted: #94a3b8;
-    --accent: #10b981;
-    --danger: #ef4444;
-    --border: #1e293b;
-    --safe-top: env(safe-area-inset-top);
-    --safe-bot: env(safe-area-inset-bottom);
+    --bg:        #0a2730;  /* darker than brand deep teal, for contrast */
+    --card:      #11414b;  /* brand deep teal (from site CSS) */
+    --card-2:    #17586a;  /* one step lighter */
+    --text:      #f8fafc;
+    --muted:     #9fc5ce;  /* muted teal-grey, readable on dark */
+    --accent:    #22c55e;  /* leaf green — "Green Planet" + check-in */
+    --accent-2:  #68ccd1;  /* brand light teal (from site CSS) */
+    --danger:    #ef4444;
+    --border:    #1c4b55;
+    --safe-top:  env(safe-area-inset-top);
+    --safe-bot:  env(safe-area-inset-bottom);
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--text);
@@ -225,22 +256,71 @@ function renderPage({ data, token, focusUid }) {
     scroll-snap-align: center;
     scroll-snap-stop: always;
     display: grid;
-    grid-template-rows: auto auto 1fr auto;
-    padding: calc(var(--safe-top) + 12px) 16px calc(var(--safe-bot) + 12px);
-    gap: 12px;
+    grid-template-rows: auto auto auto 1fr auto;
+    padding: calc(var(--safe-top) + 10px) 16px calc(var(--safe-bot) + 12px);
+    gap: 10px;
     position: relative;
     overflow: hidden;
   }
+
+  /* Brand strip — persistent header on every card. */
+  .brand {
+    display: grid;
+    grid-template-columns: 36px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    background: linear-gradient(180deg, rgba(17, 65, 75, 0.6), rgba(17, 65, 75, 0.2));
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .brand-logo {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    background: #fff;
+    object-fit: contain;
+    padding: 3px;
+  }
+  .brand-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .brand-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .brand-tag {
+    font-size: 11px;
+    color: var(--accent-2);
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .brand-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .brand-meta .pager {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.5px;
+  }
+
   .card-head {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 8px;
     font-size: 13px;
     color: var(--muted);
+    padding: 0 4px;
   }
-  .card-head .pager { font-variant-numeric: tabular-nums; letter-spacing: 0.5px; }
-  .card-head .time { color: var(--text); font-weight: 600; }
+  .card-head .time { color: var(--text); font-weight: 600; font-size: 14px; }
   .chip {
     display: inline-block;
     padding: 3px 10px;
@@ -311,7 +391,7 @@ function renderPage({ data, token, focusUid }) {
   }
   .row .value { display: flex; flex-direction: column; gap: 4px; word-break: break-word; }
   .row .value a {
-    color: var(--accent);
+    color: var(--accent-2);
     text-decoration: none;
     font-weight: 600;
     font-size: 14px;
@@ -332,6 +412,7 @@ function renderPage({ data, token, focusUid }) {
   .actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
     gap: 10px;
   }
   .btn {
@@ -348,10 +429,38 @@ function renderPage({ data, token, focusUid }) {
   }
   .btn:active { transform: scale(0.97); }
   .btn[disabled] { opacity: 0.5; }
-  .btn-in  { background: var(--accent); }
+  .btn-in  { background: var(--accent); color: #052e16; }
   .btn-out { background: var(--danger); }
-  .btn.ok   { background: #0ea5e9; }
+  .btn.ok   { background: var(--accent-2); color: #052e16; }
   .btn.err  { background: #9a3412; }
+
+  .dispatch {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: rgba(104, 204, 209, 0.08);
+    border: 1px solid var(--border);
+    color: var(--text);
+    text-decoration: none;
+    font-size: 14px;
+  }
+  .dispatch-label {
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .dispatch-phone {
+    font-weight: 700;
+    color: var(--accent-2);
+    letter-spacing: 0.3px;
+  }
+  .dispatch:active { background: rgba(104, 204, 209, 0.15); }
 
   .nav {
     position: absolute;
