@@ -76,6 +76,11 @@ COPY --from=openclaw-build /openclaw /openclaw
 RUN printf '%s\n' '#!/usr/bin/env bash' 'exec node /openclaw/dist/entry.js "$@"' > /usr/local/bin/openclaw \
   && chmod +x /usr/local/bin/openclaw
 
+# Cache bust — bump when Railway stubbornly serves a stale image.
+# Value is irrelevant; changing it invalidates every layer below on rebuild.
+ARG CACHEBUST=2026-04-20-dispatch-btn
+RUN echo "cachebust=${CACHEBUST}" > /tmp/.cachebust
+
 COPY src ./src
 COPY clients ./clients
 COPY scripts ./scripts
