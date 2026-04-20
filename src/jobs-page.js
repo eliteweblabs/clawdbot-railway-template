@@ -94,10 +94,6 @@ function renderCard(job, idx, total, timezone, mapboxToken) {
   return `<section class="card" data-uid="${escapeAttr(job.uid)}" id="job-${escapeAttr(job.uid)}">
   <header class="brand">
     <img class="brand-logo" src="https://cdn.hibuwebsites.com/90acb87a8af043869bc67e07bbc4d3a7/dms3rep/multi/green-planet-pest-control-logo.png" alt="Green Planet Pest Control" />
-    <div class="brand-text">
-      <div class="brand-name">Green Planet Pest</div>
-      <div class="brand-tag">Boston&rsquo;s Eco-Friendly Solution</div>
-    </div>
     <div class="brand-meta">
       <div class="pager">${idx + 1} / ${total}</div>
       ${statusChip(job.status)}
@@ -191,10 +187,6 @@ function renderPage({ data, token, focusUid }) {
     <section class="card empty">
       <header class="brand">
         <img class="brand-logo" src="https://cdn.hibuwebsites.com/90acb87a8af043869bc67e07bbc4d3a7/dms3rep/multi/green-planet-pest-control-logo.png" alt="Green Planet Pest Control" />
-        <div class="brand-text">
-          <div class="brand-name">Green Planet Pest</div>
-          <div class="brand-tag">Boston&rsquo;s Eco-Friendly Solution</div>
-        </div>
         <div class="brand-meta"><div class="pager">0 / 0</div></div>
       </header>
       <div class="empty-wrap">
@@ -281,7 +273,7 @@ function renderPage({ data, token, focusUid }) {
   /* Brand strip — persistent header on every card. */
   .brand {
     display: grid;
-    grid-template-columns: 36px 1fr auto;
+    grid-template-columns: auto 1fr auto;
     align-items: center;
     gap: 10px;
     padding: 6px 10px;
@@ -290,29 +282,11 @@ function renderPage({ data, token, focusUid }) {
     border-radius: 12px;
   }
   .brand-logo {
-    width: 36px; height: 36px;
-    border-radius: 8px;
-    background: #fff;
+    height: 32px;
+    width: auto;
+    max-width: 60vw;
     object-fit: contain;
-    padding: 3px;
-  }
-  .brand-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-  .brand-name {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--text);
-    letter-spacing: 0.2px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .brand-tag {
-    font-size: 11px;
-    color: var(--accent-2);
-    letter-spacing: 0.3px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    display: block;
   }
   .brand-meta {
     display: flex;
@@ -320,6 +294,7 @@ function renderPage({ data, token, focusUid }) {
     gap: 8px;
     font-size: 12px;
     color: var(--muted);
+    grid-column: 3;
   }
   .brand-meta .pager {
     font-variant-numeric: tabular-nums;
