@@ -52,6 +52,30 @@ function formatTimeRange(job) {
   return s || e || "";
 }
 
+// "Today", "Tomorrow", or "Thu Apr 23" — used on the card head so you can
+// tell what day each job is on as you swipe across a multi-day deck.
+function formatDayLabel(iso, timezone, todayKey) {
+  try {
+    const d = new Date(iso);
+    const tz = timezone || "America/New_York";
+    const key = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(d);
+    if (key === todayKey) return "Today";
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowKey = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(tomorrow);
+    if (key === tomorrowKey) return "Tomorrow";
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, weekday: "short", month: "short", day: "numeric",
+    }).format(d);
+  } catch {
+    return "";
+  }
+}
+
 function formatDurationMins(startIso, endIso) {
   try {
     const ms = new Date(endIso) - new Date(startIso);
@@ -73,7 +97,7 @@ function statusChip(status) {
   return `<span class="chip" style="background:${color}">${escapeHtml(s || "unknown")}</span>`;
 }
 
-function renderCard(job, idx, total, timezone, mapboxToken) {
+function renderCard(job, idx, total, timezone, mapboxToken, todayKey) {
   const hasGeo = Number.isFinite(job.lat) && Number.isFinite(job.lng);
   const mapUrl = hasGeo ? mapboxStaticUrl(job.lat, job.lng, mapboxToken) : null;
 
@@ -87,6 +111,7 @@ function renderCard(job, idx, total, timezone, mapboxToken) {
 
   const timeRange = formatTimeRange({ ...job, timezone });
   const duration = formatDurationMins(job.startTime, job.endTime);
+  const dayLabel = formatDayLabel(job.startTime, timezone, todayKey);
 
   const phoneMatch = /(\+?\d[\d\s().-]{7,}\d)/.exec(job.description || "");
   const phone = phoneMatch ? phoneMatch[1].replace(/[^\d+]/g, "") : null;
@@ -101,6 +126,7 @@ function renderCard(job, idx, total, timezone, mapboxToken) {
   </header>
 
   <div class="card-head">
+    ${dayLabel ? `<div class="day-label">${escapeHtml(dayLabel)}</div>` : ""}
     <div class="time">${escapeHtml(timeRange)}${duration ? ` &middot; ${escapeHtml(duration)}` : ""}</div>
   </div>
 
@@ -181,7 +207,15 @@ function renderCard(job, idx, total, timezone, mapboxToken) {
 function renderPage({ data, token, focusUid }) {
   const mapboxToken = process.env.MAPBOX_TOKEN?.trim() || "";
   const jobs = data.jobs || [];
-  const cards = jobs.map((j, i) => renderCard(j, i, jobs.length, data.timezone, mapboxToken)).join("\n");
+  const todayKey = (() => {
+    try {
+      return new Intl.DateTimeFormat("en-CA", {
+        timeZone: data.timezone || "America/New_York",
+        year: "numeric", month: "2-digit", day: "2-digit",
+      }).format(new Date());
+    } catch { return ""; }
+  })();
+  const cards = jobs.map((j, i) => renderCard(j, i, jobs.length, data.timezone, mapboxToken, todayKey)).join("\n");
 
   const empty = jobs.length === 0 ? `
     <section class="card empty">
@@ -313,6 +347,17 @@ function renderPage({ data, token, focusUid }) {
     padding: 0 4px;
   }
   .card-head .time { color: var(--text); font-weight: 600; font-size: 14px; }
+  .card-head .day-label {
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    background: rgba(34, 197, 94, 0.12);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    border-radius: 999px;
+  }
 
   /* Drive-time chip — Mapbox Matrix API from navigator.geolocation. */
   .drivetime {

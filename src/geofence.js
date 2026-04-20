@@ -256,24 +256,33 @@ export async function fetchTodaysJobs({ workspaceDir, includeAll = false, dateKe
   const bookings = Array.isArray(payload.bookings) ? payload.bookings : [];
   const timezone = process.env.TIMEZONE?.trim() || "America/New_York";
 
-  // Resolve which calendar day to render. focusUid wins: if the caller asked
-  // for a specific UID we pivot the deck to that UID's day so deep links to
-  // future bookings Just Work.
-  let resolvedDateKey = dateKey;
+  // Resolve the focused booking so the UI can scroll to it and the header can
+  // show its day. A focusUid implies "show me everything so I can swipe around"
+  // unless the caller explicitly pins to a single day via dateKey.
   let focusResolved = null;
   if (focusUid) {
     focusResolved = bookings.find((b) => b.uid === focusUid) || null;
-    if (focusResolved?.startTime) {
-      resolvedDateKey = dateKeyInZone(new Date(focusResolved.startTime), timezone);
-    }
   }
   const todayKey = dateKeyInZone(new Date(), timezone);
-  const effectiveDateKey = resolvedDateKey || (includeAll ? null : todayKey);
+  const focusDateKey = focusResolved?.startTime
+    ? dateKeyInZone(new Date(focusResolved.startTime), timezone)
+    : null;
+
+  // Filter precedence:
+  //   dateKey          → that specific day
+  //   focusUid         → all upcoming (so user can swipe to adjacent jobs)
+  //   includeAll       → all upcoming
+  //   default          → today only
+  const effectiveDateKey = dateKey
+    ? dateKey
+    : (focusUid || includeAll)
+      ? null
+      : todayKey;
 
   const todays = bookings.filter((b) => {
     const status = String(b.status || "").toLowerCase();
     if (status && status !== "accepted" && status !== "pending") return false;
-    if (!effectiveDateKey) return true; // includeAll with no date pivot
+    if (!effectiveDateKey) return true;
     if (!b.startTime) return false;
     return dateKeyInZone(new Date(b.startTime), timezone) === effectiveDateKey;
   });
@@ -307,12 +316,18 @@ export async function fetchTodaysJobs({ workspaceDir, includeAll = false, dateKe
 
   jobs.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
 
+  // For the page title/header we prefer the focused job's day when there is
+  // one — that's the card the user is staring at. Otherwise fall back to the
+  // filter's date, then today.
+  const headerDate = focusDateKey || effectiveDateKey || todayKey;
+
   return {
     ok: true,
     tech: payload.username || process.env.CALCOM_USERNAME || null,
     timezone,
-    date: effectiveDateKey || todayKey,
-    isToday: (effectiveDateKey || todayKey) === todayKey,
+    date: headerDate,
+    isToday: headerDate === todayKey,
+    spansMultipleDays: !effectiveDateKey && jobs.length > 1,
     focusUid: focusUid || null,
     focusFound: !!focusResolved,
     count: jobs.length,
