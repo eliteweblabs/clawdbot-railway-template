@@ -108,6 +108,15 @@ function renderCard(job, idx, total, timezone, mapboxToken) {
     <div class="time">${escapeHtml(timeRange)}${duration ? ` &middot; ${escapeHtml(duration)}` : ""}</div>
   </div>
 
+  ${hasGeo ? `<div class="drivetime" data-lat="${escapeAttr(String(job.lat))}" data-lng="${escapeAttr(String(job.lng))}" data-state="idle" role="button" tabindex="0">
+    <span class="drivetime-icon" aria-hidden="true"></span>
+    <span class="drivetime-value">&mdash;</span>
+    <span class="drivetime-label">drive time</span>
+  </div>` : `<div class="drivetime drivetime-disabled" data-state="none">
+    <span class="drivetime-icon" aria-hidden="true"></span>
+    <span class="drivetime-label">no coordinates</span>
+  </div>`}
+
   <div class="map-wrap">
     ${mapUrl
       ? `<img class="map" src="${escapeAttr(mapUrl)}" alt="Map of ${escapeAttr(job.address)}" loading="lazy" />`
@@ -204,6 +213,12 @@ function renderPage({ data, token, focusUid }) {
   // disclosure risk beyond the initial page load.
   const tokenJson = JSON.stringify(token || "");
   const focusJson = JSON.stringify(focusUid || "");
+  // Mapbox public (pk.*) token — already exposed in the static map image URLs,
+  // so adding it as a JS constant is not a new disclosure. Required client-side
+  // so we can call the Directions Matrix API with the user's geolocation.
+  const mapboxTokenJson = JSON.stringify(
+    /^pk\./.test(mapboxToken) ? mapboxToken : ""
+  );
 
   return `<!doctype html>
 <html lang="en">
@@ -256,7 +271,7 @@ function renderPage({ data, token, focusUid }) {
     scroll-snap-align: center;
     scroll-snap-stop: always;
     display: grid;
-    grid-template-rows: auto auto auto 1fr auto;
+    grid-template-rows: auto auto auto auto 1fr auto;
     padding: calc(var(--safe-top) + 10px) 16px calc(var(--safe-bot) + 12px);
     gap: 10px;
     position: relative;
@@ -321,6 +336,61 @@ function renderPage({ data, token, focusUid }) {
     padding: 0 4px;
   }
   .card-head .time { color: var(--text); font-weight: 600; font-size: 14px; }
+
+  /* Drive-time chip — Mapbox Matrix API from navigator.geolocation. */
+  .drivetime {
+    display: inline-flex;
+    align-items: center;
+    justify-self: start;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgba(34, 197, 94, 0.12);
+    border: 1px solid rgba(34, 197, 94, 0.35);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s ease, transform 0.1s ease;
+  }
+  .drivetime:active { transform: scale(0.97); }
+  .drivetime-icon {
+    width: 16px; height: 16px;
+    background: var(--accent);
+    -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 11l1.5-4.5A2 2 0 018.4 5h7.2a2 2 0 011.9 1.5L19 11m-14 0h14m-14 0v5a1 1 0 001 1h1a1 1 0 001-1v-1h8v1a1 1 0 001 1h1a1 1 0 001-1v-5M7 14h.01M17 14h.01'  fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>") no-repeat center / contain;
+            mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 11l1.5-4.5A2 2 0 018.4 5h7.2a2 2 0 011.9 1.5L19 11m-14 0h14m-14 0v5a1 1 0 001 1h1a1 1 0 001-1v-1h8v1a1 1 0 001 1h1a1 1 0 001-1v-5M7 14h.01M17 14h.01' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>") no-repeat center / contain;
+    flex: 0 0 auto;
+  }
+  .drivetime-value {
+    color: var(--accent);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+  .drivetime-label {
+    color: var(--muted);
+    font-weight: 500;
+    font-size: 13px;
+  }
+  .drivetime[data-state="loading"] .drivetime-value { color: var(--muted); }
+  .drivetime[data-state="denied"] {
+    background: rgba(104, 204, 209, 0.08);
+    border-color: var(--border);
+  }
+  .drivetime[data-state="denied"] .drivetime-value { color: var(--accent-2); }
+  .drivetime[data-state="error"] {
+    background: rgba(239, 68, 68, 0.08);
+    border-color: rgba(239, 68, 68, 0.3);
+  }
+  .drivetime-disabled {
+    opacity: 0.5;
+    cursor: default;
+    background: rgba(148, 188, 197, 0.06);
+    border-color: var(--border);
+  }
+  .drivetime-disabled:active { transform: none; }
+  .drivetime-disabled .drivetime-icon { background: var(--muted); }
   .chip {
     display: inline-block;
     padding: 3px 10px;
@@ -543,6 +613,7 @@ function renderPage({ data, token, focusUid }) {
 (() => {
   const TOKEN = ${tokenJson};
   const FOCUS_UID = ${focusJson};
+  const MAPBOX_TOKEN = ${mapboxTokenJson};
   const deck = document.getElementById("deck");
   const toast = document.getElementById("toast");
   let toastTimer = null;
@@ -634,6 +705,106 @@ function renderPage({ data, token, focusUid }) {
     if (!uid || !event) return;
     postEvent(uid, event, btn);
   });
+
+  // ---- Drive times via Mapbox Directions Matrix API --------------------
+  //
+  // One request computes driving duration from the device's geolocation to
+  // every job on the page. Chips start as "Drive time — tap to enable",
+  // then switch to "12 min · drive from you" (or an error state).
+  // ----------------------------------------------------------------------
+  function setChip(chip, state, value, label) {
+    chip.dataset.state = state;
+    const v = chip.querySelector(".drivetime-value");
+    const l = chip.querySelector(".drivetime-label");
+    if (v) v.textContent = value;
+    if (l) l.textContent = label;
+  }
+
+  async function loadDriveTimes({ fromClick = false } = {}) {
+    if (!MAPBOX_TOKEN) return;
+    const chips = [...document.querySelectorAll(".drivetime[data-lat][data-lng]")];
+    if (chips.length === 0) return;
+
+    if (!("geolocation" in navigator)) {
+      chips.forEach((c) => setChip(c, "error", "—", "no geolocation"));
+      return;
+    }
+
+    chips.forEach((c) => setChip(c, "loading", "…", "locating"));
+
+    let origin;
+    try {
+      origin = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve([pos.coords.longitude, pos.coords.latitude]),
+          (err) => reject(err),
+          { enableHighAccuracy: false, timeout: 10000, maximumAge: 60_000 }
+        );
+      });
+    } catch (err) {
+      const denied = err && err.code === 1;
+      chips.forEach((c) =>
+        setChip(c, "denied", "GPS", denied ? "tap to enable" : "tap to retry")
+      );
+      if (fromClick) {
+        showToast(denied ? "Location permission denied" : "Couldn't get location", "err");
+      }
+      return;
+    }
+
+    // Matrix API supports up to 25 coordinates on the free plan. We have
+    // at most a handful of jobs per day, but split into chunks just in case.
+    async function queryChunk(destChips) {
+      const coords = [
+        origin.map((n) => n.toFixed(6)).join(","),
+        ...destChips.map((c) => \`\${Number(c.dataset.lng).toFixed(6)},\${Number(c.dataset.lat).toFixed(6)}\`),
+      ].join(";");
+      const url =
+        "https://api.mapbox.com/directions-matrix/v1/mapbox/driving/" +
+        coords +
+        "?sources=0&annotations=duration&access_token=" +
+        encodeURIComponent(MAPBOX_TOKEN);
+      const r = await fetch(url);
+      if (!r.ok) throw new Error("matrix " + r.status);
+      const data = await r.json();
+      return data.durations && data.durations[0] ? data.durations[0] : [];
+    }
+
+    try {
+      const CHUNK = 24; // 1 origin + 24 destinations = 25 coords
+      for (let i = 0; i < chips.length; i += CHUNK) {
+        const slice = chips.slice(i, i + CHUNK);
+        const durations = await queryChunk(slice);
+        slice.forEach((chip, idx) => {
+          const sec = durations[idx + 1];
+          if (sec == null || !Number.isFinite(sec)) {
+            setChip(chip, "error", "—", "no route");
+          } else {
+            const mins = Math.max(1, Math.round(sec / 60));
+            const label = mins < 60
+              ? mins + " min"
+              : Math.floor(mins / 60) + "h " + (mins % 60) + "m";
+            setChip(chip, "ok", label, "drive from you");
+          }
+        });
+      }
+    } catch (err) {
+      chips.forEach((c) => setChip(c, "error", "—", "route failed"));
+    }
+  }
+
+  // Allow a tap on a denied/error chip to retry.
+  deck.addEventListener("click", (e) => {
+    const chip = e.target.closest(".drivetime[data-lat][data-lng]");
+    if (!chip) return;
+    const state = chip.dataset.state;
+    if (state === "denied" || state === "error" || state === "idle") {
+      loadDriveTimes({ fromClick: true });
+    }
+  });
+
+  // Kick off once on load; browsers will prompt for permission.
+  loadDriveTimes();
 })();
 </script>
 </body>
