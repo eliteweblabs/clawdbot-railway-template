@@ -372,10 +372,13 @@ export function registerGeofenceRoutes(app, { workspaceDir }) {
       const timezone = process.env.TIMEZONE?.trim() || "America/New_York";
 
       // Only today, only real bookings. ?all=1 bypasses the today filter
-      // (handy for debugging from a phone).
+      // (handy for debugging from a phone). calcom-booking-api returns
+      // Booking.status as lowercase ("accepted"/"pending"/"cancelled") —
+      // match case-insensitively.
       const includeAll = req.query?.all === "1" || req.query?.all === "true";
       const todays = bookings.filter(b => {
-        if (b.status && b.status !== "ACCEPTED" && b.status !== "PENDING") return false;
+        const status = String(b.status || "").toLowerCase();
+        if (status && status !== "accepted" && status !== "pending") return false;
         return includeAll || isTodayInZone(b.startTime, timezone);
       });
 
