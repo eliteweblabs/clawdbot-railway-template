@@ -92,7 +92,17 @@ function normalizeAddress(s) {
 }
 
 async function geocodeMapbox(address, token) {
-  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?limit=1&access_token=${token}`;
+  // country=us + types=address + autocomplete=false pins Mapbox to exact US
+  // addresses. Without these it happily cross-matches "Washington Street" to
+  // the nearest town with one (Norwood vs Brookline, etc).
+  const params = new URLSearchParams({
+    access_token: token,
+    limit: "1",
+    country: "us",
+    types: "address",
+    autocomplete: "false",
+  });
+  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?${params.toString()}`;
   const r = await fetch(url);
   if (!r.ok) throw new Error(`mapbox ${r.status}`);
   const data = await r.json();
