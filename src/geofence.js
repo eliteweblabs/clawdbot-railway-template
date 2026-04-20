@@ -212,8 +212,16 @@ function requireGeofenceToken(req, res, next) {
 // ---------------------------------------------------------------------------
 // Shared helper: fetch today's (or all upcoming) bookings, filter, geocode.
 // Used by both JSON route `/geofence/jobs` and the HTML page `/jobs`.
+//
+// Filter precedence (first match wins):
+//   1. focusUid — fetch everything, then auto-select whichever calendar day
+//      that UID lives on. Lets /jobs/:uid deep-link to a job scheduled for
+//      tomorrow / next week without the caller knowing the date.
+//   2. dateKey (YYYY-MM-DD) — explicit day filter.
+//   3. includeAll === true — all upcoming, no date filter.
+//   4. default — filter to today in TIMEZONE.
 // ---------------------------------------------------------------------------
-export async function fetchTodaysJobs({ workspaceDir, includeAll = false }) {
+export async function fetchTodaysJobs({ workspaceDir, includeAll = false, dateKey = null, focusUid = null }) {
   if (!workspaceDir) throw new Error("fetchTodaysJobs: workspaceDir is required");
 
   const bookingApiPath = path.join(workspaceDir, "scripts", "booking-api.sh");
@@ -248,10 +256,26 @@ export async function fetchTodaysJobs({ workspaceDir, includeAll = false }) {
   const bookings = Array.isArray(payload.bookings) ? payload.bookings : [];
   const timezone = process.env.TIMEZONE?.trim() || "America/New_York";
 
+  // Resolve which calendar day to render. focusUid wins: if the caller asked
+  // for a specific UID we pivot the deck to that UID's day so deep links to
+  // future bookings Just Work.
+  let resolvedDateKey = dateKey;
+  let focusResolved = null;
+  if (focusUid) {
+    focusResolved = bookings.find((b) => b.uid === focusUid) || null;
+    if (focusResolved?.startTime) {
+      resolvedDateKey = dateKeyInZone(new Date(focusResolved.startTime), timezone);
+    }
+  }
+  const todayKey = dateKeyInZone(new Date(), timezone);
+  const effectiveDateKey = resolvedDateKey || (includeAll ? null : todayKey);
+
   const todays = bookings.filter((b) => {
     const status = String(b.status || "").toLowerCase();
     if (status && status !== "accepted" && status !== "pending") return false;
-    return includeAll || isTodayInZone(b.startTime, timezone);
+    if (!effectiveDateKey) return true; // includeAll with no date pivot
+    if (!b.startTime) return false;
+    return dateKeyInZone(new Date(b.startTime), timezone) === effectiveDateKey;
   });
 
   const jobs = [];
@@ -287,7 +311,10 @@ export async function fetchTodaysJobs({ workspaceDir, includeAll = false }) {
     ok: true,
     tech: payload.username || process.env.CALCOM_USERNAME || null,
     timezone,
-    date: dateKeyInZone(new Date(), timezone),
+    date: effectiveDateKey || todayKey,
+    isToday: (effectiveDateKey || todayKey) === todayKey,
+    focusUid: focusUid || null,
+    focusFound: !!focusResolved,
     count: jobs.length,
     geocoder: process.env.MAPBOX_TOKEN?.trim() ? "mapbox" : "nominatim",
     generatedAt: new Date().toISOString(),

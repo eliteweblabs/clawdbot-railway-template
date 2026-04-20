@@ -190,9 +190,11 @@ function renderPage({ data, token, focusUid }) {
         <div class="brand-meta"><div class="pager">0 / 0</div></div>
       </header>
       <div class="empty-wrap">
-        <h1>No jobs today</h1>
+        <h1>${data.isToday ? "No jobs today" : "No jobs on this day"}</h1>
         <p class="muted">${escapeHtml(data.date)} &middot; ${escapeHtml(data.timezone)}</p>
-        <p class="muted">Enjoy the day off, or add <code>?all=1</code> to see upcoming bookings.</p>
+        <p class="muted">${focusUid && !data.focusFound
+          ? "That booking UID wasn&rsquo;t found. It may have been cancelled or is outside the lookup window."
+          : "Enjoy the day off, or add <code>?all=1</code> to see upcoming bookings."}</p>
         <a class="dispatch" href="tel:+16175351943" style="margin-top:24px">
           <span class="dispatch-label">Dispatch</span>
           <span class="dispatch-phone">(617) 535-1943</span>
@@ -794,8 +796,13 @@ export function registerJobsPageRoutes(app, { workspaceDir }) {
   async function handler(req, res) {
     try {
       const includeAll = req.query?.all === "1" || req.query?.all === "true";
-      const data = await fetchTodaysJobs({ workspaceDir, includeAll });
       const focusUid = req.params?.uid || "";
+      const dateKey = typeof req.query?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)
+        ? req.query.date
+        : null;
+      // Deep-link to a specific booking pivots the deck to that booking's day
+      // automatically — caller never needs to know what date it's on.
+      const data = await fetchTodaysJobs({ workspaceDir, includeAll, dateKey, focusUid: focusUid || null });
       const token = String(req.query?.token || "").trim();
       const html = renderPage({ data, token, focusUid });
       res.type("html").send(html);
