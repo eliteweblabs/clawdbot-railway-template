@@ -4,12 +4,16 @@
 #
 # Usage:
 #   booking-api.sh availability
-#   booking-api.sh create "Todd Smith" "todd@example.com" "2026-04-20T10:00:00"
+#   booking-api.sh create "Todd Smith" "todd@example.com" "2026-04-20T10:00:00" [notes] [address]
 #   booking-api.sh list [upcoming]
 #   booking-api.sh get <uid>
 #   booking-api.sh cancel <uid> "reason"
-#   booking-api.sh reschedule <uid> "2026-04-25T14:00:00"
+#   booking-api.sh reschedule <uid> "2026-04-25T14:00:00" [address] [notes]
 #   booking-api.sh event-types
+#
+# Address goes into Booking.location (Cal.com's in-person address field), which
+# is what the /jobs geofence page reads first when picking an address to
+# geocode. Notes go into Booking.description.
 
 set -e
 
@@ -27,13 +31,16 @@ case "$CMD" in
     curl -s "$BASE/api/booking/availability" "${HEADERS[@]}"
     ;;
   create)
-    NAME="$1"; EMAIL="$2"; START="$3"; NOTES="${4:-}"
-    BODY=$(python3 -c "
-import json
-d = {'name': '$NAME', 'email': '$EMAIL', 'start': '$START'}
-if '$NOTES': d['notes'] = '$NOTES'
+    # Pass strings via env vars, not shell interpolation, so apostrophes,
+    # commas, and quotes in addresses/notes don't break the JSON encoder.
+    export BAPI_NAME="$1" BAPI_EMAIL="$2" BAPI_START="$3" BAPI_NOTES="${4:-}" BAPI_ADDRESS="${5:-}"
+    BODY=$(python3 -c '
+import json, os
+d = {"name": os.environ["BAPI_NAME"], "email": os.environ["BAPI_EMAIL"], "start": os.environ["BAPI_START"]}
+if os.environ.get("BAPI_NOTES"):   d["notes"]   = os.environ["BAPI_NOTES"]
+if os.environ.get("BAPI_ADDRESS"): d["address"] = os.environ["BAPI_ADDRESS"]
 print(json.dumps(d))
-")
+')
     curl -s -X POST "$BASE/api/booking/create" "${HEADERS[@]}" -d "$BODY"
     ;;
   list)
@@ -55,9 +62,15 @@ print(json.dumps(d))
     curl -s -X DELETE "$BASE/api/booking/$UID" "${HEADERS[@]}" -d "$BODY"
     ;;
   reschedule)
-    UID="$1"; NEW_START="$2"
-    curl -s -X PATCH "$BASE/api/booking/$UID/reschedule" "${HEADERS[@]}" \
-      -d "{\"start\":\"$NEW_START\"}"
+    export BAPI_UID="$1" BAPI_START="$2" BAPI_ADDRESS="${3:-}" BAPI_NOTES="${4:-}"
+    BODY=$(python3 -c '
+import json, os
+d = {"start": os.environ["BAPI_START"]}
+if os.environ.get("BAPI_ADDRESS"): d["address"] = os.environ["BAPI_ADDRESS"]
+if os.environ.get("BAPI_NOTES"):   d["notes"]   = os.environ["BAPI_NOTES"]
+print(json.dumps(d))
+')
+    curl -s -X PATCH "$BASE/api/booking/$BAPI_UID/reschedule" "${HEADERS[@]}" -d "$BODY"
     ;;
   event-types)
     curl -s "$BASE/api/booking/event-types" "${HEADERS[@]}"
