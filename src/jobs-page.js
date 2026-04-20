@@ -440,27 +440,39 @@ function renderPage({ data, token, focusUid }) {
     align-items: center;
     justify-content: center;
     gap: 10px;
-    padding: 10px 14px;
-    border-radius: 12px;
-    background: rgba(104, 204, 209, 0.08);
-    border: 1px solid var(--border);
-    color: var(--text);
+    padding: 16px 12px;
+    border: 0;
+    border-radius: 14px;
+    background: var(--accent-2);
+    color: #052e16;
     text-decoration: none;
-    font-size: 14px;
+    font-size: 17px;
+    font-weight: 700;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: transform 0.1s ease, opacity 0.2s ease;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.1) inset;
+  }
+  .dispatch:active { transform: scale(0.97); }
+  .dispatch::before {
+    content: "";
+    width: 18px; height: 18px;
+    background: currentColor;
+    -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor'><path d='M6.6 10.8a15.1 15.1 0 006.6 6.6l2.2-2.2a1 1 0 011-.25 11.4 11.4 0 003.6.57 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1 11.4 11.4 0 00.57 3.6 1 1 0 01-.25 1l-2.2 2.2z'/></svg>") no-repeat center / contain;
+            mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor'><path d='M6.6 10.8a15.1 15.1 0 006.6 6.6l2.2-2.2a1 1 0 011-.25 11.4 11.4 0 003.6.57 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1 11.4 11.4 0 00.57 3.6 1 1 0 01-.25 1l-2.2 2.2z'/></svg>") no-repeat center / contain;
   }
   .dispatch-label {
-    color: var(--muted);
     text-transform: uppercase;
-    letter-spacing: 0.6px;
-    font-size: 11px;
-    font-weight: 700;
+    letter-spacing: 0.8px;
+    font-size: 12px;
+    font-weight: 800;
+    opacity: 0.75;
   }
   .dispatch-phone {
-    font-weight: 700;
-    color: var(--accent-2);
+    font-weight: 800;
     letter-spacing: 0.3px;
+    font-variant-numeric: tabular-nums;
   }
-  .dispatch:active { background: rgba(104, 204, 209, 0.15); }
 
   .nav {
     position: absolute;
