@@ -118,7 +118,9 @@ function renderCard(job, idx, total, timezone, mapboxToken, todayKey) {
 
   return `<section class="card" data-uid="${escapeAttr(job.uid)}" id="job-${escapeAttr(job.uid)}">
   <header class="brand">
-    <img class="brand-logo" src="https://cdn.hibuwebsites.com/90acb87a8af043869bc67e07bbc4d3a7/dms3rep/multi/green-planet-pest-control-logo.png" alt="Green Planet Pest Control" />
+    <button type="button" class="brand-home" data-action="jump-first" aria-label="Jump to first job">
+      <img class="brand-logo" src="https://cdn.hibuwebsites.com/90acb87a8af043869bc67e07bbc4d3a7/dms3rep/multi/green-planet-pest-control-logo.png" alt="Green Planet Pest Control" />
+    </button>
     <div class="brand-meta">
       <div class="pager">${idx + 1} / ${total}</div>
       ${statusChip(job.status)}
@@ -220,7 +222,9 @@ function renderPage({ data, token, focusUid }) {
   const empty = jobs.length === 0 ? `
     <section class="card empty">
       <header class="brand">
-        <img class="brand-logo" src="https://cdn.hibuwebsites.com/90acb87a8af043869bc67e07bbc4d3a7/dms3rep/multi/green-planet-pest-control-logo.png" alt="Green Planet Pest Control" />
+        <button type="button" class="brand-home" data-action="jump-first" aria-label="Jump to first job">
+          <img class="brand-logo" src="https://cdn.hibuwebsites.com/90acb87a8af043869bc67e07bbc4d3a7/dms3rep/multi/green-planet-pest-control-logo.png" alt="Green Planet Pest Control" />
+        </button>
         <div class="brand-meta"><div class="pager">0 / 0</div></div>
       </header>
       <div class="empty-wrap">
@@ -317,6 +321,22 @@ function renderPage({ data, token, focusUid }) {
     border: 1px solid var(--border);
     border-radius: 12px;
   }
+  .brand-home {
+    background: transparent;
+    border: 0;
+    padding: 2px 0;
+    margin: 0;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 6px;
+    transition: opacity 0.15s ease, transform 0.1s ease;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .brand-home:hover { opacity: 0.85; }
+  .brand-home:active { transform: scale(0.96); }
+  .brand-home:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 3px; }
   .brand-logo {
     height: 32px;
     width: auto;
@@ -659,10 +679,18 @@ function renderPage({ data, token, focusUid }) {
     }
   }
 
-  // Prev/next buttons.
+  // Prev/next buttons, plus logo-as-home (jump to first card).
   deck.addEventListener("click", (e) => {
     const target = e.target;
     if (!(target instanceof HTMLElement)) return;
+
+    const homeBtn = target.closest('[data-action="jump-first"]');
+    if (homeBtn) {
+      const first = deck.firstElementChild;
+      if (first) first.scrollIntoView({ inline: "start", block: "nearest", behavior: "smooth" });
+      return;
+    }
+
     const card = target.closest(".card");
     if (!card) return;
     if (target.classList.contains("nav-prev")) {
