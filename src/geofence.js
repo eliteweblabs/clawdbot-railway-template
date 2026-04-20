@@ -209,6 +209,94 @@ function requireGeofenceToken(req, res, next) {
   return next();
 }
 
+// ---------------------------------------------------------------------------
+// Shared helper: fetch today's (or all upcoming) bookings, filter, geocode.
+// Used by both JSON route `/geofence/jobs` and the HTML page `/jobs`.
+// ---------------------------------------------------------------------------
+export async function fetchTodaysJobs({ workspaceDir, includeAll = false }) {
+  if (!workspaceDir) throw new Error("fetchTodaysJobs: workspaceDir is required");
+
+  const bookingApiPath = path.join(workspaceDir, "scripts", "booking-api.sh");
+  if (!fs.existsSync(bookingApiPath)) {
+    const err = new Error(
+      `booking-api.sh not found at ${bookingApiPath}. ` +
+        "Place the script on the Railway persistent volume at $WORKSPACE_DIR/scripts/."
+    );
+    err.code = "BOOKING_API_MISSING";
+    throw err;
+  }
+
+  const result = await runScript(bookingApiPath, ["list", "upcoming"]);
+  if (result.code !== 0) {
+    const err = new Error("booking-api.sh failed");
+    err.code = "BOOKING_API_FAILED";
+    err.details = { exitCode: result.code, stdout: result.stdout, stderr: result.stderr };
+    throw err;
+  }
+
+  const trimmed = (result.stdout || "").trim();
+  let payload;
+  try {
+    payload = trimmed ? JSON.parse(trimmed) : {};
+  } catch (e) {
+    const err = new Error("booking-api returned non-JSON");
+    err.code = "BOOKING_API_NON_JSON";
+    err.details = { stdout: trimmed.slice(0, 1000) };
+    throw err;
+  }
+
+  const bookings = Array.isArray(payload.bookings) ? payload.bookings : [];
+  const timezone = process.env.TIMEZONE?.trim() || "America/New_York";
+
+  const todays = bookings.filter((b) => {
+    const status = String(b.status || "").toLowerCase();
+    if (status && status !== "accepted" && status !== "pending") return false;
+    return includeAll || isTodayInZone(b.startTime, timezone);
+  });
+
+  const jobs = [];
+  for (const b of todays) {
+    const address = pickAddress(b);
+    let geo = null;
+    if (address) {
+      try { geo = await geocode(address); }
+      catch (e) { console.warn("[fetchTodaysJobs] geocode failed:", address, e.message); }
+    }
+    jobs.push({
+      jobId: b.uid,
+      uid: b.uid,
+      title: b.title || "",
+      description: b.description || "",
+      customer: b.attendee || "",
+      email: b.email || "",
+      startTime: b.startTime,
+      endTime: b.endTime,
+      localTime: localTimeLabel(b.startTime, timezone),
+      status: b.status,
+      address: geo?.resolved || address,
+      rawAddress: address,
+      lat: geo?.lat ?? null,
+      lng: geo?.lng ?? null,
+      geocoded: !!geo,
+    });
+  }
+
+  jobs.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+
+  return {
+    ok: true,
+    tech: payload.username || process.env.CALCOM_USERNAME || null,
+    timezone,
+    date: dateKeyInZone(new Date(), timezone),
+    count: jobs.length,
+    geocoder: process.env.MAPBOX_TOKEN?.trim() ? "mapbox" : "nominatim",
+    generatedAt: new Date().toISOString(),
+    jobs,
+  };
+}
+
+export { requireGeofenceToken };
+
 export function registerGeofenceRoutes(app, { workspaceDir }) {
   if (!workspaceDir) {
     throw new Error("registerGeofenceRoutes: workspaceDir is required");
@@ -216,7 +304,6 @@ export function registerGeofenceRoutes(app, { workspaceDir }) {
 
   const scriptsDir = path.join(workspaceDir, "scripts");
   const jobTrackerPath = path.join(scriptsDir, "job-tracker.sh");
-  const bookingApiPath = path.join(scriptsDir, "booking-api.sh");
 
   if (!process.env.GEOFENCE_TOKEN?.trim()) {
     console.warn(
@@ -347,91 +434,19 @@ export function registerGeofenceRoutes(app, { workspaceDir }) {
   //   }
   app.get("/geofence/jobs", requireGeofenceToken, async (req, res) => {
     try {
-      if (!fs.existsSync(bookingApiPath)) {
-        return res.status(500).json({
-          ok: false,
-          error: `booking-api.sh not found at ${bookingApiPath}. ` +
-            "Place the script on the Railway persistent volume at $WORKSPACE_DIR/scripts/.",
-        });
-      }
-
-      const result = await runScript(bookingApiPath, ["list", "upcoming"]);
-      if (result.code !== 0) {
-        return res.status(500).json({
-          ok: false,
-          error: "booking-api.sh failed",
-          exitCode: result.code,
-          stdout: result.stdout,
-          stderr: result.stderr,
-        });
-      }
-
-      const trimmed = (result.stdout || "").trim();
-      let payload;
-      try {
-        payload = trimmed ? JSON.parse(trimmed) : {};
-      } catch (e) {
-        return res.status(502).json({
-          ok: false,
-          error: "booking-api returned non-JSON",
-          stdout: trimmed.slice(0, 1000),
-        });
-      }
-
-      const bookings = Array.isArray(payload.bookings) ? payload.bookings : [];
-      const timezone = process.env.TIMEZONE?.trim() || "America/New_York";
-
-      // Only today, only real bookings. ?all=1 bypasses the today filter
-      // (handy for debugging from a phone). calcom-booking-api returns
-      // Booking.status as lowercase ("accepted"/"pending"/"cancelled") —
-      // match case-insensitively.
       const includeAll = req.query?.all === "1" || req.query?.all === "true";
-      const todays = bookings.filter(b => {
-        const status = String(b.status || "").toLowerCase();
-        if (status && status !== "accepted" && status !== "pending") return false;
-        return includeAll || isTodayInZone(b.startTime, timezone);
-      });
-
-      // Geocode sequentially — Nominatim has a 1 req/s floor, and cache hits
-      // dominate in steady state anyway.
-      const jobs = [];
-      for (const b of todays) {
-        const address = pickAddress(b);
-        let geo = null;
-        if (address) {
-          try { geo = await geocode(address); }
-          catch (e) { console.warn("[geofence/jobs] geocode failed:", address, e.message); }
-        }
-        jobs.push({
-          jobId: b.uid,
-          uid: b.uid,
-          title: b.title || "",
-          customer: b.attendee || "",
-          email: b.email || "",
-          startTime: b.startTime,
-          endTime: b.endTime,
-          localTime: localTimeLabel(b.startTime, timezone),
-          status: b.status,
-          address: geo?.resolved || address,
-          lat: geo?.lat ?? null,
-          lng: geo?.lng ?? null,
-          geocoded: !!geo,
-        });
-      }
-
-      jobs.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
-
-      return res.json({
-        ok: true,
-        tech: payload.username || process.env.CALCOM_USERNAME || null,
-        timezone,
-        date: dateKeyInZone(new Date(), timezone),
-        count: jobs.length,
-        geocoder: process.env.MAPBOX_TOKEN?.trim() ? "mapbox" : "nominatim",
-        generatedAt: new Date().toISOString(),
-        jobs,
-      });
+      const data = await fetchTodaysJobs({ workspaceDir, includeAll });
+      return res.json(data);
     } catch (err) {
+      if (err?.code === "BOOKING_API_MISSING") {
+        return res.status(500).json({ ok: false, error: err.message });
+      }
+      if (err?.code === "BOOKING_API_FAILED") {
+        return res.status(500).json({ ok: false, error: err.message, ...err.details });
+      }
+      if (err?.code === "BOOKING_API_NON_JSON") {
+        return res.status(502).json({ ok: false, error: err.message, ...err.details });
+      }
       console.error("[/geofence/jobs] error:", err);
       return res.status(500).json({ ok: false, error: String(err) });
     }

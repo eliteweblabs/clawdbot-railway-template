@@ -8,7 +8,9 @@ import express from "express";
 import httpProxy from "http-proxy";
 import * as tar from "tar";
 
+import { registerCraterRoutes } from "./crater.js";
 import { registerGeofenceRoutes } from "./geofence.js";
+import { registerJobsPageRoutes } from "./jobs-page.js";
 
 // Migrate deprecated CLAWDBOT_* env vars → OPENCLAW_* so existing Railway deployments
 // keep working. Users should update their Railway Variables to use the new names.
@@ -308,6 +310,16 @@ app.get("/setup/healthz", (_req, res) => res.json({ ok: true }));
 // Registered early so they bypass the dashboard Basic-auth catch-all below.
 // See src/geofence.js for details and optional GEOFENCE_TOKEN gating.
 registerGeofenceRoutes(app, { workspaceDir: WORKSPACE_DIR });
+
+// HTML field-tech UI: /jobs and /jobs/:uid. Same GEOFENCE_TOKEN gating as
+// /geofence endpoints so a single ?token=... bookmark works everywhere.
+registerJobsPageRoutes(app, { workspaceDir: WORKSPACE_DIR });
+
+// Crater billing proxy endpoints (GET/POST /crater/*). Registered before the
+// dashboard catch-all so field techs / automations can hit them without the
+// Control UI password. See src/crater.js for CRATER_URL / CRATER_API_TOKEN
+// usage and optional CRATER_WEBHOOK_TOKEN gating.
+registerCraterRoutes(app);
 
 async function probeGateway() {
   // Don't assume HTTP — the gateway primarily speaks WebSocket.
