@@ -27,6 +27,122 @@ import path from "node:path";
 const JOB_ID_RE = /^[A-Za-z0-9_.:-]{1,128}$/;
 const SCRIPT_TIMEOUT_MS = 30_000;
 
+// ---------------------------------------------------------------------------
+// Timezone helper — "is this ISO timestamp on the same calendar day as now in
+// the given IANA zone?". Pure Intl, no deps.
+// ---------------------------------------------------------------------------
+function dateKeyInZone(date, timeZone) {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+  });
+  return fmt.format(date);
+}
+
+function isTodayInZone(iso, timeZone) {
+  try {
+    return dateKeyInZone(new Date(iso), timeZone) ===
+           dateKeyInZone(new Date(), timeZone);
+  } catch {
+    return false;
+  }
+}
+
+function localTimeLabel(iso, timeZone) {
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone, hour: "numeric", minute: "2-digit", hour12: true,
+    }).format(new Date(iso));
+  } catch {
+    return "";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Address extraction
+// ---------------------------------------------------------------------------
+// Cal.com stores physical meeting addresses in Booking.location for the
+// "In Person (Attendee Address)" event type. Older / free-form flows put it
+// in description. Try location first, fall back to description, skip anything
+// that's obviously a video URL.
+function pickAddress(b) {
+  const candidates = [b.location, b.description].filter(Boolean);
+  for (const raw of candidates) {
+    const cleaned = String(raw)
+      .replace(/^(address|location)\s*[:\-]\s*/i, "")
+      .split("\n")[0]
+      .trim();
+    if (!cleaned) continue;
+    if (/^https?:\/\//i.test(cleaned)) continue;
+    if (/zoom|meet\.google|teams\.microsoft|daily\.co/i.test(cleaned)) continue;
+    if (cleaned.length >= 5) return cleaned;
+  }
+  return "";
+}
+
+// ---------------------------------------------------------------------------
+// Geocoder — Mapbox if MAPBOX_TOKEN is set, else Nominatim (free, 1 req/s).
+// Process-local cache; Railway restarts are cheap and addresses don't move.
+// ---------------------------------------------------------------------------
+const GEOCODE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const geocodeCache = new Map(); // normalized address -> { lat, lng, resolved, expiresAt }
+let lastNominatimCallAt = 0;
+
+function normalizeAddress(s) {
+  return String(s || "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+async function geocodeMapbox(address, token) {
+  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?limit=1&access_token=${token}`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`mapbox ${r.status}`);
+  const data = await r.json();
+  const f = data.features?.[0];
+  if (!f) return null;
+  return { lat: f.center[1], lng: f.center[0], resolved: f.place_name || address };
+}
+
+async function geocodeNominatim(address) {
+  // Polite throttle — Nominatim ToS is 1 req/s.
+  const wait = lastNominatimCallAt + 1100 - Date.now();
+  if (wait > 0) await new Promise(res => setTimeout(res, wait));
+  lastNominatimCallAt = Date.now();
+
+  const url = new URL("https://nominatim.openstreetmap.org/search");
+  url.searchParams.set("q", address);
+  url.searchParams.set("format", "json");
+  url.searchParams.set("limit", "1");
+  const r = await fetch(url, {
+    headers: {
+      "User-Agent": "clawdbot-geofence (support@eliteweblabs.com)",
+      "Accept": "application/json",
+    },
+  });
+  if (!r.ok) throw new Error(`nominatim ${r.status}`);
+  const arr = await r.json();
+  if (!Array.isArray(arr) || arr.length === 0) return null;
+  return {
+    lat: Number(arr[0].lat),
+    lng: Number(arr[0].lon),
+    resolved: arr[0].display_name || address,
+  };
+}
+
+async function geocode(address) {
+  if (!address || !address.trim()) return null;
+  const key = normalizeAddress(address);
+  const hit = geocodeCache.get(key);
+  if (hit && hit.expiresAt > Date.now()) return { ...hit, cached: true };
+
+  const mapboxToken = process.env.MAPBOX_TOKEN?.trim();
+  const result = mapboxToken
+    ? await geocodeMapbox(address, mapboxToken)
+    : await geocodeNominatim(address);
+
+  if (!result) return null;
+  geocodeCache.set(key, { ...result, expiresAt: Date.now() + GEOCODE_CACHE_TTL_MS });
+  return { ...result, cached: false };
+}
+
 function runScript(scriptPath, args, timeoutMs = SCRIPT_TIMEOUT_MS) {
   return new Promise((resolve) => {
     let proc;
@@ -136,21 +252,90 @@ export function registerGeofenceRoutes(app, { workspaceDir }) {
 
       const result = await runScript(jobTrackerPath, args);
 
-      return res.status(result.code === 0 ? 200 : 500).json({
+      const response = {
         ok: result.code === 0,
         jobId,
         event,
         exitCode: result.code,
         stdout: result.stdout,
         stderr: result.stderr,
-      });
+      };
+
+      // Auto-invoice: when a job completes and the caller supplied invoice
+      // data, create a Crater invoice and surface the public URL in the
+      // response so the tech/shortcut can hand it to the customer.
+      //
+      // Accepts either shorthand { client, service, amount } or the full
+      // Crater schema { customer_name, items: [...] }. If CRATER_URL is not
+      // configured we skip silently (the geofence side still succeeded).
+      if (event === "leave" && result.code === 0) {
+        const invoiceInput = body.invoice && typeof body.invoice === "object" ? body.invoice : null;
+        const hasShorthand =
+          body.client || body.service || body.amount != null || body.customer_name;
+
+        if (invoiceInput || hasShorthand) {
+          const payload = invoiceInput || {
+            client: body.client,
+            service: body.service,
+            amount: body.amount,
+            email: body.email,
+            notes: body.notes,
+            customer_name: body.customer_name,
+            items: body.items,
+          };
+          payload.notes = payload.notes || `Job ${jobId} — auto-generated on completion`;
+
+          const invResult = await createCraterInvoice(payload);
+          if (invResult.ok) {
+            const inv = invResult.invoice || {};
+            response.invoice = {
+              ok: true,
+              invoice_id: inv.invoice_id,
+              invoice_number: inv.invoice_number,
+              total: inv.total,
+              invoice_url: inv.public_url,
+              pdf_url: inv.pdf_url,
+              payment_url: inv.payment_url,
+            };
+          } else {
+            response.invoice = {
+              ok: false,
+              error: invResult.error,
+              status: invResult.status,
+            };
+          }
+        }
+      }
+
+      return res.status(result.code === 0 ? 200 : 500).json(response);
     } catch (err) {
       console.error("[/geofence] error:", err);
       return res.status(500).json({ ok: false, error: String(err) });
     }
   });
 
-  app.get("/geofence/jobs", requireGeofenceToken, async (_req, res) => {
+  // GET /geofence/jobs
+  //
+  // Returns today's bookings (filtered to the TIMEZONE env, default
+  // America/New_York) as a flat array of jobs with geocoded coordinates.
+  // Designed to be consumed directly by an iOS Shortcut ("Get Dictionary
+  // Value" over .jobs[*].address / .lat / .lng).
+  //
+  // Shape:
+  //   {
+  //     ok: true,
+  //     tech: "todd-mcnamara",
+  //     timezone: "America/New_York",
+  //     date: "2026-04-20",
+  //     count: 3,
+  //     generatedAt: "2026-04-20T14:25:00.000Z",
+  //     jobs: [
+  //       { jobId, uid, title, customer, email, startTime, endTime,
+  //         localTime, status, address, lat, lng, geocoded },
+  //       ...
+  //     ]
+  //   }
+  app.get("/geofence/jobs", requireGeofenceToken, async (req, res) => {
     try {
       if (!fs.existsSync(bookingApiPath)) {
         return res.status(500).json({
@@ -161,28 +346,78 @@ export function registerGeofenceRoutes(app, { workspaceDir }) {
       }
 
       const result = await runScript(bookingApiPath, ["list", "upcoming"]);
-
       if (result.code !== 0) {
         return res.status(500).json({
           ok: false,
+          error: "booking-api.sh failed",
           exitCode: result.code,
           stdout: result.stdout,
           stderr: result.stderr,
         });
       }
 
-      // booking-api.sh returns JSON from Cal.com on stdout. Pass through as
-      // parsed JSON if possible so Shortcuts can "Get Dictionary Value" on it.
       const trimmed = (result.stdout || "").trim();
-      if (!trimmed) {
-        return res.json({ ok: true, bookings: [] });
-      }
+      let payload;
       try {
-        const parsed = JSON.parse(trimmed);
-        return res.json(parsed);
-      } catch {
-        return res.type("application/json").send(trimmed);
+        payload = trimmed ? JSON.parse(trimmed) : {};
+      } catch (e) {
+        return res.status(502).json({
+          ok: false,
+          error: "booking-api returned non-JSON",
+          stdout: trimmed.slice(0, 1000),
+        });
       }
+
+      const bookings = Array.isArray(payload.bookings) ? payload.bookings : [];
+      const timezone = process.env.TIMEZONE?.trim() || "America/New_York";
+
+      // Only today, only real bookings. ?all=1 bypasses the today filter
+      // (handy for debugging from a phone).
+      const includeAll = req.query?.all === "1" || req.query?.all === "true";
+      const todays = bookings.filter(b => {
+        if (b.status && b.status !== "ACCEPTED" && b.status !== "PENDING") return false;
+        return includeAll || isTodayInZone(b.startTime, timezone);
+      });
+
+      // Geocode sequentially — Nominatim has a 1 req/s floor, and cache hits
+      // dominate in steady state anyway.
+      const jobs = [];
+      for (const b of todays) {
+        const address = pickAddress(b);
+        let geo = null;
+        if (address) {
+          try { geo = await geocode(address); }
+          catch (e) { console.warn("[geofence/jobs] geocode failed:", address, e.message); }
+        }
+        jobs.push({
+          jobId: b.uid,
+          uid: b.uid,
+          title: b.title || "",
+          customer: b.attendee || "",
+          email: b.email || "",
+          startTime: b.startTime,
+          endTime: b.endTime,
+          localTime: localTimeLabel(b.startTime, timezone),
+          status: b.status,
+          address: geo?.resolved || address,
+          lat: geo?.lat ?? null,
+          lng: geo?.lng ?? null,
+          geocoded: !!geo,
+        });
+      }
+
+      jobs.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+
+      return res.json({
+        ok: true,
+        tech: payload.username || process.env.CALCOM_USERNAME || null,
+        timezone,
+        date: dateKeyInZone(new Date(), timezone),
+        count: jobs.length,
+        geocoder: process.env.MAPBOX_TOKEN?.trim() ? "mapbox" : "nominatim",
+        generatedAt: new Date().toISOString(),
+        jobs,
+      });
     } catch (err) {
       console.error("[/geofence/jobs] error:", err);
       return res.status(500).json({ ok: false, error: String(err) });
