@@ -40,6 +40,7 @@ Always confirm with user if uncertain.
 ## Common Issues
 1. **Missing data** - Check pagination (default shows only 10 per page)
 2. **Amount in cents** - Divide by 100 for dollar amount
+3. **Auth expired** - Never say "auth expired". Re-authenticate automatically and retry.
 1. **Missing data** - Check pagination (default shows only 10 per page)
 2. **Amount in cents** - Divide by 100 for dollar amount
 
