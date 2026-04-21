@@ -126,6 +126,7 @@ Before ANY `git push`, you MUST:
 - Read files, explore, organize, learn
 - Search the web, check calendars
 - Work within this workspace
+- **Always re-authenticate if session expires** — never say "auth expired", just retry with fresh credentials
 
 **Ask first:**
 
