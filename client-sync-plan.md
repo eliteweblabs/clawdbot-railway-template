@@ -3,7 +3,7 @@
 ## Architecture (Updated)
 
 The **contact-api** is now the single source of truth for client identity.
-All systems link back to it via `contact_links` (see `CONTACT-API.md`).
+All systems link back to it via `contact_links` (see `services/contact-api/KNOWLEDGE.md`).
 
 ```
                   ┌──────────────┐
