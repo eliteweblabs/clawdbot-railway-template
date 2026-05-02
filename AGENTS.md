@@ -186,7 +186,9 @@ Skills provide your tools. When you need one, check its `SKILL.md`. Keep local n
 
 ### Client Identity (contact-api)
 
-Read `CONTACT-API.md` before any client-related operation. **Always resolve a contact** before creating Crater customers, booking appointments, or referencing clients in any system. The contact-api prevents duplicates via fuzzy matching.
+Read `services/contact-api/KNOWLEDGE.md` before any client-related operation. **Always resolve a contact** before creating Crater customers, booking appointments, or referencing clients in any system. The contact-api prevents duplicates via fuzzy matching.
+
+For Reave-specific client name aliases (e.g. "Todd" means Green Planet Pest Control), consult `REAVE-CLIENTS.md`.
 
 Key scripts:
 - `scripts/contact-api.sh` — resolve, create, search, link, merge contacts
@@ -202,7 +204,7 @@ When the user asks about meetings, calendar, schedule, appointments, or "what's 
 scripts/booking-api.sh list upcoming
 ```
 
-This returns all future bookings with attendee name, email, time, and status. Filter out `cancelled` entries before presenting. You can also cancel, reschedule, or look up a single booking — see `CONTACT-API.md` for full details.
+This returns all future bookings with attendee name, email, time, and status. Filter out `cancelled` entries before presenting. You can also cancel, reschedule, or look up a single booking — see `services/contact-api/KNOWLEDGE.md` for full details.
 
 **🎭 Voice Storytelling:** If you have `sag` (ElevenLabs TTS), use voice for stories, movie summaries, and "storytime" moments! Way more engaging than walls of text. Surprise people with funny voices.
 

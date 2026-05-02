@@ -18,7 +18,7 @@ _Learn about the person you're helping. Update this as you go._
 - DNS typically at **name.com**
 - Email via **Google Workspace** + **Resend** (transactional)
 - Uses **Harvest** for time tracking/billing but admits he's bad at it
-- Uses **Crater** for invoicing (see `CRATER.md` for API docs)
+- Uses **Crater** for invoicing (see `services/crater/KNOWLEDGE.md` for API docs, `REAVE-CLIENTS.md` for client aliases & recurring list)
 - ~5 active projects at any given time
 - Fire protection plan analysis is a separate workstream from client web dev
 
