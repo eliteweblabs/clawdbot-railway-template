@@ -9,6 +9,7 @@ import httpProxy from "http-proxy";
 import * as tar from "tar";
 
 import { registerGeofenceRoutes } from "./geofence.js";
+import { syncKnowledgeServices } from "./knowledge-sync.js";
 
 // Migrate deprecated CLAWDBOT_* env vars → OPENCLAW_* so existing Railway deployments
 // keep working. Users should update their Railway Variables to use the new names.
@@ -179,6 +180,15 @@ async function startGateway() {
 
   fs.mkdirSync(STATE_DIR, { recursive: true });
   fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
+
+  // Pull per-service knowledge (KNOWLEDGE.md etc.) from configured GitHub repos
+  // into <workspace>/services/<name>/ before openclaw indexes the workspace.
+  // Driven by the KNOWLEDGE_SERVICES env var; no-op if unset.
+  try {
+    syncKnowledgeServices({ workspaceDir: WORKSPACE_DIR });
+  } catch (err) {
+    console.error(`[knowledge-sync] unexpected failure: ${String(err)}`);
+  }
 
   const args = [
     "gateway",
