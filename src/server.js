@@ -78,6 +78,12 @@ const INTERNAL_GATEWAY_PORT = Number.parseInt(process.env.INTERNAL_GATEWAY_PORT 
 const INTERNAL_GATEWAY_HOST = process.env.INTERNAL_GATEWAY_HOST ?? "127.0.0.1";
 const GATEWAY_TARGET = `http://${INTERNAL_GATEWAY_HOST}:${INTERNAL_GATEWAY_PORT}`;
 
+// The voice-call plugin starts its own loopback HTTP server (OpenClaw default port 3334) for
+// /voice/webhook and optional /voice/stream WebSockets. Public traffic only hits the wrapper
+// port, so we reverse-proxy /voice/* to this internal listener.
+const INTERNAL_VOICE_WEBHOOK_PORT = Number.parseInt(process.env.INTERNAL_VOICE_WEBHOOK_PORT ?? "3334", 10);
+const VOICE_TARGET = `http://${INTERNAL_GATEWAY_HOST}:${INTERNAL_VOICE_WEBHOOK_PORT}`;
+
 // Always run the built-from-source CLI entry directly to avoid PATH/global-install mismatches.
 const OPENCLAW_ENTRY = process.env.OPENCLAW_ENTRY?.trim() || "/openclaw/dist/entry.js";
 const OPENCLAW_NODE = process.env.OPENCLAW_NODE?.trim() || "node";
@@ -720,6 +726,91 @@ function runCmd(cmd, args, opts = {}) {
   });
 }
 
+/** Best-effort: enable voice-call and merge Telnyx settings from Railway env before gateway starts. */
+async function syncVoiceCallFromEnv() {
+  if (!isConfigured()) return;
+
+  const enable = await runCmd(OPENCLAW_NODE, clawArgs(["plugins", "enable", "voice-call"]));
+  if (enable.code !== 0) {
+    console.warn(
+      `[wrapper] openclaw plugins enable voice-call failed (exit ${enable.code})\n${enable.output}`,
+    );
+  }
+
+  const apiKey = process.env.TELNYX_API_KEY?.trim();
+  const connectionId = process.env.TELNYX_CONNECTION_ID?.trim();
+  const publicKey = process.env.TELNYX_PUBLIC_KEY?.trim();
+  const fromNumber = process.env.TELNYX_FROM_NUMBER?.trim();
+  const publicUrl = process.env.VOICE_PUBLIC_URL?.trim() || process.env.TELNYX_WEBHOOK_URL?.trim();
+
+  const partialEnv =
+    Boolean(apiKey) ||
+    Boolean(connectionId) ||
+    Boolean(publicKey) ||
+    Boolean(fromNumber) ||
+    Boolean(publicUrl);
+
+  if (!apiKey || !connectionId || !publicKey || !fromNumber || !publicUrl) {
+    if (partialEnv) {
+      console.warn(
+        "[wrapper] Telnyx voice: incomplete env; set TELNYX_API_KEY, TELNYX_CONNECTION_ID, TELNYX_PUBLIC_KEY, TELNYX_FROM_NUMBER, and VOICE_PUBLIC_URL (or TELNYX_WEBHOOK_URL) to auto-merge voice-call config.",
+      );
+    }
+    return;
+  }
+
+  const webhookPath = process.env.VOICE_WEBHOOK_PATH?.trim() || "/voice/webhook";
+  const streamPath = process.env.VOICE_STREAM_PATH?.trim() || "/voice/stream";
+  const inboundPolicy = process.env.VOICE_INBOUND_POLICY?.trim() || "open";
+
+  const voiceConfig = {
+    provider: "telnyx",
+    fromNumber,
+    publicUrl,
+    inboundPolicy,
+    telnyx: {
+      apiKey,
+      connectionId,
+      publicKey,
+    },
+    serve: {
+      port: INTERNAL_VOICE_WEBHOOK_PORT,
+      bind: "127.0.0.1",
+      path: webhookPath,
+    },
+  };
+
+  if (process.env.VOICE_STREAMING_ENABLED === "1") {
+    voiceConfig.streaming = { enabled: true, streamPath };
+  }
+
+  const entry = {
+    enabled: true,
+    config: voiceConfig,
+  };
+
+  const set = await runCmd(
+    OPENCLAW_NODE,
+    clawArgs(["config", "set", "--json", "plugins.entries.voice-call", JSON.stringify(entry)]),
+  );
+  if (set.code !== 0) {
+    console.warn(`[wrapper] voice-call config set failed (exit ${set.code})\n${set.output}`);
+  } else {
+    console.log("[wrapper] merged plugins.entries.voice-call from env (Telnyx)");
+  }
+}
+
+function upgradeRequestPathname(req) {
+  try {
+    const raw = req.url || "/";
+    const q = raw.indexOf("?");
+    const pathOnly = q >= 0 ? raw.slice(0, q) : raw;
+    return new URL(pathOnly, "http://localhost").pathname;
+  } catch {
+    return "/";
+  }
+}
+
 app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
   try {
     const respondJson = (status, body) => {
@@ -1351,6 +1442,8 @@ proxy.on("error", (err, _req, res) => {
 function requireDashboardAuth(req, res, next) {
   if (req.path === "/healthz" || req.path === "/setup/healthz") return next();
   if (req.path.startsWith("/hooks")) return next(); // allow OpenClaw webhook endpoints to bypass dashboard auth
+  // Carrier webhooks (Telnyx/Twilio) cannot send SETUP_PASSWORD; voice-call uses /voice/* on the public URL.
+  if (req.path.startsWith("/voice")) return next();
   if (!SETUP_PASSWORD) return next(); // no password configured → open
   const header = req.headers.authorization || "";
   const [scheme, encoded] = header.split(" ");
@@ -1405,7 +1498,8 @@ app.use(requireDashboardAuth, async (req, res) => {
   }
 
   attachGatewayAuthHeader(req);
-  return proxy.web(req, res, { target: GATEWAY_TARGET });
+  const target = req.path.startsWith("/voice") ? VOICE_TARGET : GATEWAY_TARGET;
+  return proxy.web(req, res, { target });
 });
 
 const server = app.listen(PORT, "0.0.0.0", async () => {
@@ -1423,6 +1517,7 @@ const server = app.listen(PORT, "0.0.0.0", async () => {
 
   console.log(`[wrapper] gateway token: ${OPENCLAW_GATEWAY_TOKEN ? "(set)" : "(missing)"}`);
   console.log(`[wrapper] gateway target: ${GATEWAY_TARGET}`);
+  console.log(`[wrapper] voice-call proxy: /voice/* → ${VOICE_TARGET}`);
   if (!SETUP_PASSWORD) {
     console.warn("[wrapper] WARNING: SETUP_PASSWORD is not set; /setup will error.");
   }
@@ -1463,6 +1558,14 @@ const server = app.listen(PORT, "0.0.0.0", async () => {
     }
   }
 
+  if (isConfigured()) {
+    try {
+      await syncVoiceCallFromEnv();
+    } catch (err) {
+      console.warn(`[wrapper] syncVoiceCallFromEnv: ${String(err)}`);
+    }
+  }
+
   // Auto-start the gateway if already configured so polling channels (Telegram/Discord/etc.)
   // work even if nobody visits the web UI.
   if (isConfigured()) {
@@ -1491,6 +1594,13 @@ server.on("upgrade", async (req, socket, head) => {
     socket.destroy();
     return;
   }
+
+  const pathname = upgradeRequestPathname(req);
+  if (pathname.startsWith("/voice")) {
+    proxy.ws(req, socket, head, { target: VOICE_TARGET });
+    return;
+  }
+
   attachGatewayAuthHeader(req);
   proxy.ws(req, socket, head, { target: GATEWAY_TARGET });
 });
