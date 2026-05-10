@@ -315,7 +315,13 @@ function requireSetupAuth(req, res, next) {
 
 const app = express();
 app.disable("x-powered-by");
-app.use(express.json({ limit: "1mb" }));
+// Telnyx/Twilio POST webhooks to /voice/* (and proxied OpenClaw /hooks/*) must forward raw bodies.
+// Global express.json() consumes the stream and breaks http-proxy for those POSTs (502).
+const jsonBodyParser = express.json({ limit: "1mb" });
+app.use((req, res, next) => {
+  if (req.path.startsWith("/voice") || req.path.startsWith("/hooks")) return next();
+  jsonBodyParser(req, res, next);
+});
 
 // Minimal health endpoint for Railway.
 app.get("/setup/healthz", (_req, res) => res.json({ ok: true }));
